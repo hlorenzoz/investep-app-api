@@ -1,0 +1,28 @@
+# Dependencias
+node_modules/
+
+# Build / output
+dist/
+.wrangler/
+
+# Tipos generados por Wrangler
+worker-configuration.d.ts
+
+# Secretos locales — NUNCA commitear (AGENTS.md §5)
+.dev.vars
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema operativo / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Cobertura de tests
+coverage/

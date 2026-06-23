@@ -1,0 +1,39 @@
+# Hooks de calidad (AGENTS.md §7). Integrado con pre-commit.ci.
+# Instalar una vez: `pre-commit install`. Correr todo: `just precommit`.
+# No saltar con --no-verify salvo emergencia justificada.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+        # wrangler.jsonc usa comentarios (JSONC); check-json solo valida .json puro.
+      - id: check-added-large-files
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  # Escaneo de secretos — NUNCA commitear tokens/credenciales (AGENTS.md §5).
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+
+  # Lint + format + typecheck con el toolchain del proyecto (Bun).
+  - repo: local
+    hooks:
+      - id: biome-check
+        name: biome check
+        entry: bunx biome check --write --no-errors-on-unmatched
+        language: system
+        types_or: [javascript, jsx, ts, tsx, json]
+        pass_filenames: true
+      - id: tsc
+        name: tsc --noEmit
+        entry: bunx tsc --noEmit
+        language: system
+        types_or: [ts, tsx]
+        pass_filenames: false

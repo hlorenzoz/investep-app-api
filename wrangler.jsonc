@@ -1,0 +1,45 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "investep-app-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-01",
+  // nodejs_compat lo requiere @supabase/supabase-js para correr en Workers.
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  // Variables NO sensibles (públicas). Los secretos van por `wrangler secret put`
+  // o `.dev.vars` en local — NUNCA en este archivo.
+  "vars": {
+    "ENVIRONMENT": "development"
+  },
+  // Caché (AGENTS.md §2). Crear con: `bunx wrangler kv namespace create CACHE`
+  // y reemplazar el id. Para `wrangler dev` el id placeholder funciona (storage local).
+  "kv_namespaces": [
+    {
+      "binding": "CACHE",
+      "id": "REPLACE_WITH_KV_NAMESPACE_ID"
+    }
+  ],
+  // Documentos / archivos (AGENTS.md §2). Crear con:
+  // `bunx wrangler r2 bucket create investep-documents`
+  "r2_buckets": [
+    {
+      "binding": "DOCUMENTS",
+      "bucket_name": "investep-documents"
+    }
+  ]
+
+  // --- Puntos de extensión (descomentar cuando haga falta) ---
+  //
+  // Refrescos programados de cartera (AGENTS.md §3/§6): nunca en el handler de una request.
+  // "triggers": {
+  //   "crons": ["0 */6 * * *"]
+  // },
+  //
+  // Trabajos pesados / ingestas fuera del request:
+  // "queues": {
+  //   "producers": [{ "binding": "PORTFOLIO_SYNC", "queue": "portfolio-sync" }],
+  //   "consumers": [{ "queue": "portfolio-sync" }]
+  // }
+}

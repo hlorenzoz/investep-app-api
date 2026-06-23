@@ -1,0 +1,13 @@
+# Plantilla de secretos para desarrollo local.
+# Copiá este archivo a `.dev.vars` (gitignored) y completá los valores.
+# En producción, cargalos con `bunx wrangler secret put <NOMBRE>`.
+# NUNCA commitees el `.dev.vars` real (AGENTS.md §5).
+
+# Supabase (Auth + Postgres vía cliente HTTP/REST)
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+
+# Token para proteger la documentación de la API en producción
+# (/openapi.json, /reference, /docs). Si está vacío en producción, la doc se bloquea.
+DOCS_TOKEN=
