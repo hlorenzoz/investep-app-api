@@ -13,19 +13,8 @@ if [ "$branch" != "staging" ]; then
   exit 0
 fi
 
-echo "deploy: verificando secrets del Worker (staging)…"
-listed="$(bunx wrangler secret list --env staging)"
-missing=0
-for s in SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY DOCS_TOKEN; do
-  if ! grep -qw "$s" <<< "$listed"; then
-    echo "  ✗ falta el secret: $s"
-    missing=1
-  fi
-done
-if [ "$missing" -ne 0 ]; then
-  echo "deploy ABORTADO: faltan secrets en staging (cargalos con 'just secrets-staging')."
-  exit 1
-fi
+# Chequeo de secrets compartido (única fuente de verdad de la lista).
+bash "$(dirname "$0")/check-secrets.sh" staging
 
 echo "deploy: desplegando a Cloudflare Workers (staging)…"
 exec bunx wrangler deploy --env staging
