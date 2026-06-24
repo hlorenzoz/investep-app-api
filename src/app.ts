@@ -9,8 +9,7 @@ import { brokersRouter } from "./features/brokers";
 import { healthRouter } from "./features/health/health.router";
 import { plansRouter } from "./features/plans";
 import { portfolioRouter } from "./features/portfolio";
-import { toErrorResponse } from "./lib/errors";
-import { openApiConfig } from "./lib/openapi";
+import { openApiConfig, validationHook } from "./lib/openapi";
 import { docsGuard } from "./middleware/docs-guard";
 import { errorHandler } from "./middleware/error-handler";
 import type { AppBindings } from "./types/app";
@@ -24,14 +23,7 @@ const OPENAPI_JSON_PATH = "/openapi.json";
 export function createApp() {
   const app = new OpenAPIHono<AppBindings>({
     // Toda falla de validación Zod sale con el formato de error único (AGENTS.md §4).
-    defaultHook: (result, c) => {
-      if (!result.success) {
-        return c.json(
-          toErrorResponse("VALIDATION_ERROR", "La solicitud no es válida.", result.error.issues),
-          422,
-        );
-      }
-    },
+    defaultHook: validationHook,
   });
 
   // Middleware base. OJO: no loguear cuerpos, headers ni datos sensibles (AGENTS.md §5).

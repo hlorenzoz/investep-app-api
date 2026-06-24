@@ -1,4 +1,7 @@
+import type { Hook } from "@hono/zod-openapi";
 import { ErrorSchema } from "../schemas/common";
+import type { AppBindings } from "../types/app";
+import { toErrorResponse } from "./errors";
 
 /**
  * Configuración base del documento OpenAPI. El spec generado es la fuente de verdad
@@ -24,3 +27,17 @@ export function jsonErrorResponse(description: string) {
     description,
   };
 }
+
+/**
+ * Hook de validación por defecto de OpenAPIHono: toda falla de validación Zod en el borde
+ * de la petición se traduce al formato de error único (AGENTS.md §4) con status 422.
+ * Extraído acá (en vez de inline en `createApp`) para poder testearlo de forma aislada.
+ */
+export const validationHook: Hook<unknown, AppBindings, string, unknown> = (result, c) => {
+  if (!result.success) {
+    return c.json(
+      toErrorResponse("VALIDATION_ERROR", "La solicitud no es válida.", result.error.issues),
+      422,
+    );
+  }
+};
