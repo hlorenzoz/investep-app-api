@@ -8,33 +8,8 @@
  * (gitignored). El destinatario por CLI tiene prioridad sobre RESEND_TEST_TO. No envía
  * nada si falta config o destinatario. Esto pega a Resend de verdad: usalo con cuidado.
  */
-import { existsSync, readFileSync } from "node:fs";
 import { sendEmail } from "../src/lib/resend";
-
-/** Saca un par de comillas (simples o dobles) que envuelvan el valor, como dotenv/wrangler. */
-function unquote(value: string): string {
-  if (value.length >= 2) {
-    const first = value[0];
-    if ((first === '"' || first === "'") && value.at(-1) === first) {
-      return value.slice(1, -1);
-    }
-  }
-  return value;
-}
-
-/** Parser mínimo de `.dev.vars` (formato dotenv KEY=VALUE, con comillas opcionales). */
-function loadDevVars(path = ".dev.vars"): Record<string, string> {
-  if (!existsSync(path)) return {};
-  const vars: Record<string, string> = {};
-  for (const raw of readFileSync(path, "utf8").split("\n")) {
-    const line = raw.trim();
-    if (line === "" || line.startsWith("#")) continue;
-    const eq = line.indexOf("=");
-    if (eq === -1) continue;
-    vars[line.slice(0, eq).trim()] = unquote(line.slice(eq + 1).trim());
-  }
-  return vars;
-}
+import { loadDevVars } from "./_env";
 
 const vars = loadDevVars();
 

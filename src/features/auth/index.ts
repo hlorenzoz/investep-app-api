@@ -12,3 +12,14 @@ import type { AppBindings } from "../../types/app";
  *   5. `auth.test.ts`     → tests con `bun test` contra `app.request()`.
  */
 export const authRouter = new OpenAPIHono<AppBindings>();
+
+// Provisioning surface — CLI scripts and external callers import from this boundary
+export { generatePassword } from "./password";
+export type { CredentialEmailInput, CredentialEmailOutput } from "./templates";
+export { credentialEmail } from "./templates";
+export type {
+  ProvisionUserDeps,
+  ProvisionUserInput,
+  ProvisionUserResult,
+} from "./user-provisioning";
+export { provisionUser } from "./user-provisioning";

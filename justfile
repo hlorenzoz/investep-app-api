@@ -80,6 +80,20 @@ secrets-staging:
 secrets-production:
     bunx wrangler secret bulk .dev.vars.production --env production
 
+# --- Aprovisionamiento de usuarios (CLI scripts) ---
+
+# Crea el primer usuario admin usando BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD del .dev.vars
+create-first-user:
+    bun run scripts/provision-user.ts
+
+# Crea o resetea un usuario. PASSWORD vacío → el servidor genera la contraseña.
+create-user EMAIL PASSWORD="":
+    bun run scripts/provision-user.ts {{EMAIL}} {{PASSWORD}}
+
+# Obtiene un access_token JWT para el usuario indicado (o el bootstrap por defecto).
+token EMAIL="" PASSWORD="":
+    bun run scripts/get-token.ts {{EMAIL}} {{PASSWORD}}
+
 # Correr los hooks de pre-commit sobre todo el repo
 precommit:
     pre-commit run --all-files

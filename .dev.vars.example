@@ -20,3 +20,8 @@ RESEND_FROM=
 # Destinatario por defecto para `just email-test` (SOLO dev: no lo usa el Worker).
 # Si lo definís, `just email-test` sin argumento envía acá; el argumento por CLI tiene prioridad.
 RESEND_TEST_TO=
+
+# Bootstrap admin — SOLO para scripts CLI (provision-user, get-token). NUNCA llega al Worker.
+# Usado por `just create-first-user` y `just token` sin argumentos.
+BOOTSTRAP_ADMIN_EMAIL=
+BOOTSTRAP_ADMIN_PASSWORD=

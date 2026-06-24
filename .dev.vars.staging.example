@@ -15,3 +15,8 @@ DOCS_TOKEN=
 # RESEND_FROM admite "Nombre <correo@tudominio>". Crear la key en https://resend.com/api-keys
 RESEND_API_KEY=
 RESEND_FROM=
+
+# Bootstrap admin — SOLO para scripts CLI (provision-user, get-token). NUNCA llega al Worker.
+# Usado por `just create-first-user --env staging` y `just token --env staging` sin argumentos.
+BOOTSTRAP_ADMIN_EMAIL=
+BOOTSTRAP_ADMIN_PASSWORD=
