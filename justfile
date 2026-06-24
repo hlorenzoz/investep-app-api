@@ -67,3 +67,11 @@ supabase-status:
 # Resetear la base local: re-aplica migraciones + seed. DESTRUCTIVO.
 supabase-reset:
     supabase db reset
+
+# Abrir el dashboard local (Supabase Studio) en el navegador
+supabase-studio:
+    open http://127.0.0.1:54323
+
+# Generar tipos TypeScript del schema local (regenerar tras cada migración)
+supabase-types:
+    supabase gen types typescript --local > src/types/database.types.ts
