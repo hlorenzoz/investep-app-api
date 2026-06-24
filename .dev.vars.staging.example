@@ -1,0 +1,11 @@
+# Secretos del entorno STAGING — proyecto Supabase cloud: investep-staging.
+# Copiá a `.dev.vars.staging` (gitignored) y completá los valores.
+# Lo usa `wrangler dev --env staging` (local). En deploy: `just secrets-staging` carga TODO como secrets.
+# NUNCA commitear el `.dev.vars.staging` real (AGENTS.md §5).
+
+SUPABASE_URL=https://<PROJECT_REF_STAGING>.supabase.co
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+
+# Token para proteger la documentación en staging (/openapi.json, /reference, /docs).
+DOCS_TOKEN=

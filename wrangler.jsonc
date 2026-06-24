@@ -28,7 +28,25 @@
       "binding": "DOCUMENTS",
       "bucket_name": "investep-documents"
     }
-  ]
+  ],
+
+  // Environments: staging y production apuntan a proyectos Supabase cloud separados
+  // (investep-staging, investep). El entorno devel/local usa este top-level + .dev.vars
+  // (y en Docker, el Supabase local). Los secretos (SUPABASE_*) NO van acá: van en
+  // `.dev.vars.<env>` (local) o `wrangler secret put <NOMBRE> --env <env>` (deploy).
+  // OJO Wrangler: los named environments NO heredan bindings del top-level → se repiten.
+  "env": {
+    "staging": {
+      "vars": { "ENVIRONMENT": "staging" },
+      "kv_namespaces": [{ "binding": "CACHE", "id": "REPLACE_WITH_STAGING_KV_ID" }],
+      "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "investep-documents-staging" }]
+    },
+    "production": {
+      "vars": { "ENVIRONMENT": "production" },
+      "kv_namespaces": [{ "binding": "CACHE", "id": "REPLACE_WITH_PRODUCTION_KV_ID" }],
+      "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "investep-documents" }]
+    }
+  }
 
   // --- Puntos de extensión (descomentar cuando haga falta) ---
   //

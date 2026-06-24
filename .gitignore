@@ -10,6 +10,8 @@ worker-configuration.d.ts
 
 # Secretos locales — NUNCA commitear (AGENTS.md §5)
 .dev.vars
+.dev.vars.*
+!.dev.vars.*.example
 .env
 .env.*
 !.env.example

@@ -46,6 +46,31 @@ docs:
 deploy:
     bunx wrangler deploy
 
+# --- Environments: staging / production (proyectos Supabase cloud separados) ---
+
+# Correr local apuntando a STAGING (toma .dev.vars.staging y el env staging de wrangler.jsonc)
+dev-staging:
+    bunx wrangler dev --env staging
+
+# Desplegar a staging / production (cuando los recursos cloud estén listos)
+deploy-staging:
+    bunx wrangler deploy --env staging
+
+deploy-production:
+    bunx wrangler deploy --env production
+
+# Aplicar las migraciones al proyecto Supabase ENLAZADO (corré `supabase link --project-ref <ref>` antes)
+db-push:
+    supabase db push
+
+# Cargar TODO como secrets en Workers desde el .dev.vars.<env> (todo-secret).
+# El mismo archivo sirve para `wrangler dev --env` (local) y para esto (deploy).
+secrets-staging:
+    bunx wrangler secret bulk .dev.vars.staging --env staging
+
+secrets-production:
+    bunx wrangler secret bulk .dev.vars.production --env production
+
 # Correr los hooks de pre-commit sobre todo el repo
 precommit:
     pre-commit run --all-files
