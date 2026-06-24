@@ -220,11 +220,13 @@ La API se blinda con tests. Reglas **estrictas**:
   - **Seguridad:** authz/RLS (acceso ajeno denegado), docs protegidas por entorno, que no se filtren
     datos sensibles en respuestas ni logs.
   - **Regresión:** todo bug corregido nace con un test que lo reproduce.
-  - **E2E / integración:** flujos completos contra el stack local (Supabase en Docker) cuando aplique.
+  - **E2E / integración:** Playwright **API testing** (`just e2e`, dir `e2e/`) contra la API
+    levantada de verdad + Supabase real. Hoy cubre health; crece con los endpoints de negocio.
 - **Verificación de cobertura:** corre en el **`pre-push` de la branch `devel`**
   (`scripts/coverage-devel.sh` → `bun test --coverage`). El umbral objetivo (100%) se activa en
   `bunfig.toml` (`coverageThreshold`). En el resto de las branches no se gate-ea.
-- Tests con **`bun test`**; mocká dependencias externas (red, Supabase) de forma determinista.
+- Unit/contrato con **`bun test src tests`** (mocká dependencias externas de forma determinista);
+  E2E con **`just e2e`** (Playwright API testing — `e2e/*.spec.ts`, queda fuera de `bun test`).
 
 ## 12. Observabilidad y logging (CRÍTICO — fintech)
 

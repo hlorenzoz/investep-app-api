@@ -52,6 +52,9 @@ just dev                         # → http://localhost:8787
 > exponen endpoints. La documentación está **protegida por entorno**: en `production` se bloquea
 > salvo que se configure `DOCS_TOKEN` (ver [`AGENTS.md`](./AGENTS.md) §4/§9).
 
+Para **agentes de IA / integración**, ver [`docs/api-for-agents.md`](./docs/api-for-agents.md) — auth,
+formato de error, convenciones (i18n) y cómo descubrir endpoints vía `/openapi.json`.
+
 ## Base de datos (Supabase)
 
 Las migraciones se versionan en [`supabase/migrations/`](./supabase/migrations). El acceso a datos
@@ -104,7 +107,8 @@ La imagen (`oven/bun:alpine`) se conecta a Supabase por la **red interna de Dock
 just lint     # biome check + tsc --noEmit
 just format   # biome format --write
 just fix      # biome check --write (autofix)
-just test     # bun test
+just test     # bun test src tests (unit + contrato)
+just e2e      # Playwright API testing (e2e/; requiere supabase-start + API levantada)
 just precommit  # hooks de pre-commit sobre todo el repo
 just typegen  # tipos de los bindings de Wrangler
 ```
