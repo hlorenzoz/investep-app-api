@@ -23,6 +23,11 @@ test:
 e2e:
     bunx playwright test
 
+# Prueba REAL de la integración con Resend: envía un correo de verificación.
+# Uso: `just email-test alguien@dominio.com` o `just email-test` (usa RESEND_TEST_TO de `.dev.vars`).
+email-test EMAIL="":
+    bun run scripts/send-test-email.ts {{EMAIL}}
+
 # Lint + typecheck
 lint:
     bunx biome check .

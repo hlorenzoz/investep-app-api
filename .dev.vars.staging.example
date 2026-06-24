@@ -10,3 +10,8 @@ SUPABASE_SERVICE_ROLE_KEY=
 # Token para proteger la documentación en staging (/openapi.json, /reference, /docs).
 # openssl rand -hex 32
 DOCS_TOKEN=
+
+# Resend (envío de correo transaccional). API key del panel + remitente del dominio verificado.
+# RESEND_FROM admite "Nombre <correo@tudominio>". Crear la key en https://resend.com/api-keys
+RESEND_API_KEY=
+RESEND_FROM=

@@ -15,8 +15,16 @@ export class AppError extends Error {
   readonly status: ContentfulStatusCode;
   readonly details?: unknown;
 
-  constructor(code: ErrorCode, message: string, status: ContentfulStatusCode, details?: unknown) {
-    super(message);
+  constructor(
+    code: ErrorCode,
+    message: string,
+    status: ContentfulStatusCode,
+    details?: unknown,
+    // `cause` viaja en options (Error nativo). NO se expone al cliente (el error-handler
+    // solo serializa code/message/details): sirve para diagnóstico server-side / dev.
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
     this.name = "AppError";
     this.code = code;
     this.status = status;

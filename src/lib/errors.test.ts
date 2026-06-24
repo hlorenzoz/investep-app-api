@@ -16,6 +16,11 @@ describe("AppError", () => {
     const err = new AppError("INTERNAL_ERROR", "boom", 500);
     expect(err.details).toBeUndefined();
   });
+
+  it("propaga cause vía options para diagnóstico", () => {
+    const err = new AppError("INTERNAL_ERROR", "boom", 500, undefined, { cause: "raw detail" });
+    expect(err.cause).toBe("raw detail");
+  });
 });
 
 describe("toErrorResponse", () => {

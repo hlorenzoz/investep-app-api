@@ -11,3 +11,12 @@ SUPABASE_SERVICE_ROLE_KEY=
 # Token para proteger la documentación de la API en producción
 # (/openapi.json, /reference, /docs). Si está vacío en producción, la doc se bloquea.
 DOCS_TOKEN=
+
+# Resend (envío de correo transaccional). API key del panel + remitente del dominio verificado.
+# RESEND_FROM admite "Nombre <correo@tudominio>". Crear la key en https://resend.com/api-keys
+RESEND_API_KEY=
+RESEND_FROM=
+
+# Destinatario por defecto para `just email-test` (SOLO dev: no lo usa el Worker).
+# Si lo definís, `just email-test` sin argumento envía acá; el argumento por CLI tiene prioridad.
+RESEND_TEST_TO=
