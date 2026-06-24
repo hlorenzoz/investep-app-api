@@ -15,16 +15,19 @@ export const healthHandler: RouteHandler<HealthRoute, AppBindings> = (c) => {
 
 /**
  * Readiness: confirma que el Worker puede hablar con Supabase. Le pega al endpoint
- * REST raíz (PostgREST) con la apikey; no depende de ninguna tabla de negocio.
- * Es un check de infraestructura, por eso fetch directo y no el cliente de dominio.
+ * REST raíz (PostgREST) con la SECRET key; no depende de ninguna tabla de negocio.
+ *
+ * Usamos la service-role (secret) key, no la anon: en el nuevo sistema de API keys
+ * de Supabase, el endpoint root exige una secret key. Es un check de infraestructura
+ * server-side (la key nunca se expone), por eso fetch directo y no el cliente de dominio.
  */
 export const readinessHandler: RouteHandler<ReadinessRoute, AppBindings> = async (c) => {
-  const { SUPABASE_URL, SUPABASE_ANON_KEY } = c.env;
+  const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = c.env;
 
   let supabase: "up" | "down" = "down";
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/`, {
-      headers: { apikey: SUPABASE_ANON_KEY },
+      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY },
     });
     supabase = res.ok ? "up" : "down";
   } catch {
