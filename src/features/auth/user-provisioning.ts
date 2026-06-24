@@ -7,6 +7,7 @@
 import { AppError } from "../../lib/errors";
 import type { SendEmailParams, SendEmailResult } from "../../lib/resend";
 import type { AppSupabaseClient } from "../../lib/supabase";
+import { MUST_RESET_PASSWORD_KEY } from "./metadata";
 import { generatePassword } from "./password";
 import { credentialEmail } from "./templates";
 
@@ -79,7 +80,7 @@ export async function provisionUser(
     email,
     password,
     email_confirm: true,
-    user_metadata: { must_reset_password: true },
+    user_metadata: { [MUST_RESET_PASSWORD_KEY]: true },
   });
 
   let userId: string;
@@ -111,7 +112,7 @@ export async function provisionUser(
     const { error: updateError } = await deps.admin.auth.admin.updateUserById(existing.id, {
       password,
       email_confirm: true,
-      user_metadata: { must_reset_password: true },
+      user_metadata: { [MUST_RESET_PASSWORD_KEY]: true },
     });
 
     if (updateError) {

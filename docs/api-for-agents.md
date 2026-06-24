@@ -49,6 +49,7 @@ el token; el cliente **no** habla con la base directo (eso lo hace la API con su
 | `NOT_FOUND` | 404 | Recurso inexistente |
 | `CONFLICT` | 409 | Conflicto de estado (duplicado, etc.) |
 | `INTERNAL_ERROR` | 500 | Error inesperado (sin filtrar internals) |
+| `SERVICE_UNAVAILABLE` | 503 | Dependencia externa (p. ej. Supabase Auth) no disponible; reintentá |
 
 `details` es opcional. La API **nunca** devuelve stack traces ni datos sensibles.
 
@@ -65,8 +66,12 @@ el token; el cliente **no** habla con la base directo (eso lo hace la API con su
 |---|---|---|---|
 | `GET` | `/health` | — | `200 { "status": "ok", "service": "investep-app-api", "timestamp": "…" }` |
 | `GET` | `/health/ready` | — | `200 { "status": "ready", "checks": { "supabase": "up" } }` · `503` si degradado |
+| `GET` | `/auth/me` | Bearer | `200 { "user": { "id": "…", "email": "…", "mustResetPassword": false } }` · `401` si falta o es inválido el token · `503` si no se puede verificar contra Supabase (outage; reintentá) |
 
-> Los dominios `auth`, `plans`, `portfolio` y `brokers` están **planificados** (aún stubs). A medida
+> `GET /auth/me` valida el `Authorization: Bearer <token>` contra Supabase Auth y devuelve el usuario
+> autenticado. Es el endpoint que un cliente usa para **confirmar** que su JWT es válido contra la API.
+>
+> Los dominios `plans`, `portfolio` y `brokers` están **planificados** (aún stubs). A medida
 > que se implementen aparecerán automáticamente en `/openapi.json` — vuelve a leer el spec.
 
 ## 7. Reglas del proyecto
