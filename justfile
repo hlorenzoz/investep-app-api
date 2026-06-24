@@ -15,9 +15,13 @@ install:
 dev:
     bunx wrangler dev
 
-# Tests
+# Tests unitarios y de contrato (excluye e2e/, que corre con Playwright)
 test:
-    bun test
+    bun test src tests
+
+# Tests E2E (Playwright API testing). Requiere `just supabase-start` + la API accesible.
+e2e:
+    bunx playwright test
 
 # Lint + typecheck
 lint:

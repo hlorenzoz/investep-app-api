@@ -14,4 +14,4 @@ if [ "$branch" != "devel" ]; then
 fi
 
 echo "coverage: verificando en branch devel…"
-exec bun test --coverage
+exec bun test src tests --coverage

@@ -28,3 +28,8 @@ npm-debug.log*
 
 # Cobertura de tests
 coverage/
+
+# Playwright (artefactos de tests E2E)
+/test-results/
+/playwright-report/
+/blob-report/

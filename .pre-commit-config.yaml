@@ -61,7 +61,7 @@ repos:
       # --- al pushear (más lento) ---
       - id: tests
         name: bun test
-        entry: bun test
+        entry: bun test src tests
         language: system
         pass_filenames: false
         always_run: true
