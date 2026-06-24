@@ -18,6 +18,15 @@ services:
       SUPABASE_URL: "http://supabase_kong_investep-app-api:8000"
     networks:
       - supabase
+    # Healthcheck: readiness (API + Supabase) vía wget (alpine trae wget, no curl).
+    # GET /health/ready → 200 si la API y Supabase responden; 503 si no (→ unhealthy).
+    # GET /health (liveness) es la alternativa si NO querés acoplar Supabase al estado.
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8787/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     # Hot reload con `docker compose watch` (just watch): sincroniza src/ y
     # rebuildea si cambian las dependencias.
     develop:
