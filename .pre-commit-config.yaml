@@ -6,8 +6,13 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # src/types/database.types.ts es GENERADO (`just supabase-types`): se excluye de
+      # los hooks que reescriben whitespace para que no aborten el commit. gitleaks
+      # (abajo) lo sigue escaneando — el secrets-scan no se excluye.
       - id: trailing-whitespace
+        exclude: ^src/types/database\.types\.ts$
       - id: end-of-file-fixer
+        exclude: ^src/types/database\.types\.ts$
       - id: check-merge-conflict
       - id: check-yaml
       - id: check-json
@@ -15,6 +20,7 @@ repos:
       - id: check-added-large-files
       - id: mixed-line-ending
         args: ["--fix=lf"]
+        exclude: ^src/types/database\.types\.ts$
 
   # Escaneo de secretos — NUNCA commitear tokens/credenciales (AGENTS.md §5).
   - repo: https://github.com/gitleaks/gitleaks
