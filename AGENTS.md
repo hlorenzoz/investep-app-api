@@ -66,6 +66,29 @@ Estas restricciones son del runtime y **no son negociables**:
 - No hay tipos compartidos con Flutter (Dart); sí conviene mantener alineado el spec
   OpenAPI para que el cliente Dart se genere/actualice contra él.
 
+### Calidad, documentación y refactorización del código (estricto)
+
+Esta es una API fintech: el código se **blinda**. No negociable:
+
+- **Tests con CADA implementación (obligatorio).** Toda implementación o cambio de código se entrega
+  **junto con sus tests** en la misma tanda — sin excepción. Una feature/fix sin sus tests está
+  **incompleta** y no se mergea. El detalle de qué cubrir está en §11.
+- **Tipado total.** TypeScript estricto, **sin `any`** (`noExplicitAny` es error en Biome).
+  Tipá entradas, salidas y errores. Derivá tipos del schema (Zod, `database.types.ts`) en vez de
+  redeclararlos a mano.
+- **Documentado con estándar.** Cada módulo, función pública y tipo no trivial lleva **TSDoc**
+  (`/** … */`) que explica el QUÉ y el PORQUÉ (no el cómo obvio); documentá decisiones no evidentes
+  y gotchas. Las rutas se documentan vía el schema OpenAPI (`summary`/`description`/`example`).
+- **Optimizado para Workers.** Sin trabajo redundante en el handler; respetá los límites de CPU
+  (§3). Nada de cómputo pesado ni N+1 contra Supabase.
+- **Refactorizado y testable.** Funciones chicas, una responsabilidad, sin efectos secundarios
+  ocultos. Inyectá dependencias (cliente Supabase, `env`) en vez de instanciarlas adentro: así se
+  testean. **Si algo es difícil de testear, está mal diseñado → refactorizá.**
+- **Sin bugs introducidos.** Todo cambio compila (`tsc`), pasa lint (`biome`) y tests **antes** de
+  commitear/pushear (lo fuerzan los hooks). No se mergea código en rojo.
+- **DRY y consistente.** Reutilizá `lib/`, `schemas/` y el formato único de error. Seguí el patrón
+  de `features/health/`.
+
 ### Documentación de la API (OpenAPI → Scalar + Swagger UI)
 
 El contrato OpenAPI generado por **Hono OpenAPI** alimenta directamente la documentación;
@@ -118,11 +141,19 @@ consecuencia:
 - **Justfile** es el punto de entrada único para tareas. Antes de inventar un comando,
   mira el `justfile`; si una tarea es habitual, añádele una receta en vez de documentar
   un comando suelto.
-- **pre-commit** gestiona los hooks de calidad (formato, lint, typecheck, secretos).
-  Está integrado con [pre-commit.ci](https://pre-commit.ci/), que corre y autoarregla en
-  cada PR. No te saltes los hooks (`--no-verify`) salvo emergencia justificada.
-- **Tests con `bun test`.** Todo cambio de lógica de negocio debe llevar tests. Los
-  endpoints REST se testean contra su definición de Zod OpenAPI Hono.
+- **pre-commit es el ÚNICO pipeline de calidad — NO usamos GitHub Actions.** Corre en cada
+  branch, en dos etapas: `pre-commit` (al commitear: formato, lint con Biome, typecheck con `tsc`,
+  secretos con gitleaks) y `pre-push` (al pushear: `bun test`; cobertura **solo en `devel`**; deploy
+  a Cloudflare Workers **solo en `staging`**).
+  Instalá ambos hooks una vez: `pre-commit install --install-hooks`. No te saltes los hooks
+  (`--no-verify`) salvo emergencia justificada. [pre-commit.ci](https://pre-commit.ci/) complementa
+  en PRs, pero su entorno NO tiene Bun → los hooks de Biome/tsc/tests corren **localmente** (por eso
+  van en `ci.skip`). El detalle de tests y cobertura está en §11.
+- **Deploy a `staging`: automático en el `pre-push`.** Al pushear a `staging`, si pasan los tests, el
+  hook `deploy-staging` (`scripts/deploy-staging.sh`) verifica que existan los secrets del Worker y
+  corre `wrangler deploy --env staging`. Como ocurre en el pre-push, el push **solo se completa si el
+  deploy funcionó**. Requiere `CLOUDFLARE_API_TOKEN` en el entorno (o `wrangler login`).
+  **`production` se despliega a mano** (`just deploy-production`).
 
 ## 8. Comandos habituales
 
@@ -162,9 +193,48 @@ pre-commit run --all-files
 - No commitees secretos ni tokens.
 - No loguees datos financieros o credenciales.
 - No tomes decisiones de alcance regulatorio/legal por tu cuenta: márcalo para revisión humana.
+- No commitees/pushees código que no compile, no pase lint o no tenga tests: los hooks lo frenan.
+- No bajes la cobertura ni desactives el gate de `devel` para “que pase”.
+- No uses `console.log` crudo ni loguees sin estructura: usá logging estructurado (§12).
+- No introduzcas `any` ni tipos laxos para esquivar el tipado estricto.
 
 ## 10. Contexto pendiente de confirmar
 
 - Agregador elegido (SnapTrade vs Plaid).
 - Rutas definitivas y política de exposición de la documentación (Scalar / Swagger UI) por entorno.
 - Detalle de las recetas del Justfile y de la config de pre-commit.
+
+## 11. Testing y cobertura (CRÍTICO — blindaje)
+
+La API se blinda con tests. Reglas **estrictas**:
+
+- **Objetivo: 100% de cobertura** — de **código** (líneas y funciones) y de **flujos** (cada rama,
+  cada caso de error). La cobertura es el piso, no el fin: cubrir líneas sin probar comportamiento no
+  cuenta. Nada de tests triviales para “pintar de verde”.
+- **Todo cambio lleva tests en la misma entrega.** Si tocás lógica, agregás/ajustás sus tests.
+- **Tipos de test a cubrir** (los que apliquen al cambio):
+  - **Caja blanca / unitarios:** ramas internas, condiciones límite, manejo de errores.
+  - **Funcionales / de contrato:** cada endpoint contra su definición Zod OpenAPI (status, shape,
+    validación de entrada) vía `app.request()`.
+  - **Negativos / negación:** entradas inválidas, faltantes o malformadas → error consistente (§4).
+  - **Seguridad:** authz/RLS (acceso ajeno denegado), docs protegidas por entorno, que no se filtren
+    datos sensibles en respuestas ni logs.
+  - **Regresión:** todo bug corregido nace con un test que lo reproduce.
+  - **E2E / integración:** flujos completos contra el stack local (Supabase en Docker) cuando aplique.
+- **Verificación de cobertura:** corre en el **`pre-push` de la branch `devel`**
+  (`scripts/coverage-devel.sh` → `bun test --coverage`). El umbral objetivo (100%) se activa en
+  `bunfig.toml` (`coverageThreshold`). En el resto de las branches no se gate-ea.
+- Tests con **`bun test`**; mocká dependencias externas (red, Supabase) de forma determinista.
+
+## 12. Observabilidad y logging (CRÍTICO — fintech)
+
+- **Observabilidad activada** en `wrangler.jsonc` (`observability.enabled`). Usala.
+- **Logging estructurado**, nunca `console.log` suelto. Logueá eventos con contexto (entorno, ruta,
+  identificador de request), priorizando **errores** y **eventos de seguridad** (acceso no
+  autorizado, validaciones fallidas sospechosas, fallos de authz, uso de la service-role).
+- **Ante errores:** el `error-handler` central registra el fallo con contexto suficiente para
+  diagnosticar y responde el **formato único de error** (§4) **sin filtrar internals** al cliente.
+- **Eventos de seguridad** se loguean explícitamente para auditoría (login fallido, acceso denegado,
+  rate-limit, etc.).
+- **NUNCA loguear** (§5): tokens, credenciales, keys, JWTs, ni datos de cuenta/cartera
+  identificables. Ante la duda, no lo loguees: sanitizá antes de registrar.
