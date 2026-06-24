@@ -1,0 +1,8 @@
+# Configuración de Bun.
+
+[test]
+# Cobertura de tests (AGENTS.md §11). Gate ACTIVO al 95% (líneas y funciones). El umbral se
+# evalúa solo al correr con `--coverage` → en el pre-push de `devel` (scripts/coverage-devel.sh).
+# `bun test` normal (otros hooks/branches) NO aplica el gate.
+coverageThreshold = { line = 0.95, function = 0.95 }
+coverageReporter = ["text"]

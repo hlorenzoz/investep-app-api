@@ -1,6 +1,18 @@
-# Hooks de calidad (AGENTS.md §7). Integrado con pre-commit.ci.
-# Instalar una vez: `pre-commit install`. Correr todo: `just precommit`.
-# No saltar con --no-verify salvo emergencia justificada.
+# Control de calidad (AGENTS.md §7). TODO pasa por pre-commit — NO usamos GitHub Actions.
+# Los hooks corren en `pre-commit` (al commitear: formato, lint, typecheck, secrets) y en
+# `pre-push` (al pushear: tests y, en la branch devel, cobertura), en CUALQUIER branch.
+#
+# Instalá los dos tipos de hook UNA sola vez:
+#   pre-commit install --install-hooks
+# Correr todo a mano: `just precommit`. No usar `--no-verify` salvo emergencia justificada.
+default_install_hook_types: [pre-commit, pre-push]
+
+# pre-commit.ci (https://pre-commit.ci): autoarregla en cada PR. Su entorno NO tiene Bun,
+# así que SALTEA los hooks que usan bunx/bun (corren localmente vía los git hooks).
+# En la nube quedan: whitespace, gitleaks y check-yaml/json.
+ci:
+  autofix_prs: true
+  skip: [biome-check, tsc, tests, coverage-devel, gga-devel, deploy-staging]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -28,18 +40,52 @@ repos:
     hooks:
       - id: gitleaks
 
-  # Lint + format + typecheck con el toolchain del proyecto (Bun).
+  # Calidad con el toolchain del proyecto (Bun). language: system → corren LOCAL.
   - repo: local
     hooks:
+      # --- al commitear (rápido) ---
       - id: biome-check
         name: biome check
         entry: bunx biome check --write --no-errors-on-unmatched
         language: system
         types_or: [javascript, jsx, ts, tsx, json]
         pass_filenames: true
+        stages: [pre-commit]
       - id: tsc
         name: tsc --noEmit
         entry: bunx tsc --noEmit
         language: system
         types_or: [ts, tsx]
         pass_filenames: false
+        stages: [pre-commit]
+      # --- al pushear (más lento) ---
+      - id: tests
+        name: bun test
+        entry: bun test
+        language: system
+        pass_filenames: false
+        always_run: true
+        fail_fast: true # si fallan los tests, no se corre cobertura ni deploy
+        stages: [pre-push]
+      - id: coverage-devel
+        name: cobertura (gate solo en branch devel)
+        entry: bash scripts/coverage-devel.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        fail_fast: true # si no se alcanza la cobertura en devel, frena
+        stages: [pre-push]
+      - id: gga-devel
+        name: code review IA (gga, solo en branch devel)
+        entry: bash scripts/gga-devel.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      - id: deploy-staging
+        name: deploy → Cloudflare Workers (solo en branch staging)
+        entry: bash scripts/deploy-staging.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
