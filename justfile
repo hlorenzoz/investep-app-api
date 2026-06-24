@@ -42,7 +42,7 @@ docs:
     @echo "Swagger UI:          http://localhost:8787/docs"
     @echo "OpenAPI spec:        http://localhost:8787/openapi.json"
 
-# Desplegar a Cloudflare
+# Desplegar a Cloudflare (entorno por defecto)
 deploy:
     bunx wrangler deploy
 
@@ -75,3 +75,21 @@ supabase-studio:
 # Generar tipos TypeScript del schema local (regenerar tras cada migración)
 supabase-types:
     supabase gen types typescript --local > src/types/database.types.ts
+
+# --- Docker (API local sobre Bun, para integrar con Flutter) ---
+
+# Levantar la API en Docker (requiere `just supabase-start` corriendo aparte)
+docker-up:
+    docker compose up --build -d
+
+# Desarrollo con hot reload (Docker Compose Watch: sync de src/ + rebuild si cambian deps)
+watch:
+    docker compose watch
+
+# Ver logs de la API en Docker
+docker-logs:
+    docker compose logs -f api
+
+# Bajar la API en Docker
+docker-down:
+    docker compose down

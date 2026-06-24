@@ -1,0 +1,38 @@
+# Entorno DEVEL: la API sobre Bun, conectada al Supabase local por la RED INTERNA
+# de Docker (la que crea la CLI de Supabase). Comunicación contenedor-a-contenedor:
+#   API → http://supabase_kong_investep-app-api:8000  (gateway Kong, puerto interno)
+# Requiere el Supabase local levantado (`just supabase-start`), que es quien crea la red.
+services:
+  api:
+    build: .
+    container_name: investep-api
+    ports:
+      - "8787:8787"
+    env_file:
+      - .dev.vars
+    environment:
+      PORT: "8787"
+      ENVIRONMENT: "development"
+      # Por red interna usamos el nombre del contenedor Kong + su puerto interno (8000),
+      # no 127.0.0.1:54321 (que es el mapeo al host).
+      SUPABASE_URL: "http://supabase_kong_investep-app-api:8000"
+    networks:
+      - supabase
+    # Hot reload con `docker compose watch` (just watch): sincroniza src/ y
+    # rebuildea si cambian las dependencias.
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /app/src
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./bun.lock
+
+# Red creada por la CLI de Supabase (`supabase start`). external = este compose no la
+# gestiona, solo se engancha. Si cambia el project, ajustar el nombre.
+networks:
+  supabase:
+    name: supabase_network_investep-app-api
+    external: true

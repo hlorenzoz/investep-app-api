@@ -1,0 +1,12 @@
+# Nunca meter secretos ni artefactos a la imagen.
+.dev.vars
+.dev.vars.*
+node_modules
+.git
+.gitignore
+supabase
+tests
+dist
+*.log
+.DS_Store
+README.md
