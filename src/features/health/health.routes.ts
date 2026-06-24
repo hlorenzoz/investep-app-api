@@ -29,3 +29,36 @@ export const healthRoute = createRoute({
 });
 
 export type HealthRoute = typeof healthRoute;
+
+export const ReadinessSchema = z
+  .object({
+    status: z.enum(["ready", "degraded"]),
+    checks: z
+      .object({
+        supabase: z.enum(["up", "down"]).openapi({ example: "up" }),
+      })
+      .openapi({ description: "Estado de cada dependencia externa." }),
+  })
+  .openapi("Readiness");
+
+export const readinessRoute = createRoute({
+  method: "get",
+  path: "/ready",
+  tags: ["Health"],
+  summary: "Readiness check",
+  description:
+    "Verifica conectividad con las dependencias externas (Supabase). Devuelve 503 si alguna no responde.",
+  responses: {
+    200: {
+      content: { "application/json": { schema: ReadinessSchema } },
+      description: "Listo: las dependencias responden.",
+    },
+    503: {
+      content: { "application/json": { schema: ReadinessSchema } },
+      description: "Degradado: alguna dependencia no responde.",
+    },
+    500: jsonErrorResponse("Error interno."),
+  },
+});
+
+export type ReadinessRoute = typeof readinessRoute;

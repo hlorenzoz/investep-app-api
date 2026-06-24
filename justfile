@@ -49,3 +49,21 @@ deploy:
 # Correr los hooks de pre-commit sobre todo el repo
 precommit:
     pre-commit run --all-files
+
+# --- Supabase (stack local en Docker) ---
+
+# Levantar Supabase local en Docker (excluye Storage/Realtime/analytics que no usamos)
+supabase-start:
+    supabase start -x storage-api,imgproxy,realtime,edge-runtime,vector
+
+# Parar el stack local (conserva los datos del volumen)
+supabase-stop:
+    supabase stop
+
+# Estado y credenciales del stack local (URL, anon/service keys, Studio)
+supabase-status:
+    supabase status
+
+# Resetear la base local: re-aplica migraciones + seed. DESTRUCTIVO.
+supabase-reset:
+    supabase db reset

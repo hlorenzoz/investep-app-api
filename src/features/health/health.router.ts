@@ -1,6 +1,8 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { AppBindings } from "../../types/app";
-import { healthHandler } from "./health.handlers";
-import { healthRoute } from "./health.routes";
+import { healthHandler, readinessHandler } from "./health.handlers";
+import { healthRoute, readinessRoute } from "./health.routes";
 
-export const healthRouter = new OpenAPIHono<AppBindings>().openapi(healthRoute, healthHandler);
+export const healthRouter = new OpenAPIHono<AppBindings>()
+  .openapi(healthRoute, healthHandler)
+  .openapi(readinessRoute, readinessHandler);
