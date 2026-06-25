@@ -1,4 +1,4 @@
-import { AppError } from "../../lib/errors";
+import { throwPostgrestError } from "../../lib/postgres-error";
 import type { AppSupabaseClient } from "../../lib/supabase";
 
 export const DEFAULT_LOCALE = "es";
@@ -46,12 +46,8 @@ export async function listPlans(
     query = query.eq("account_type", options.accountType);
   }
 
-  const { data, error } = await query.returns<PlanQueryRow[]>();
-  if (error) {
-    throw new AppError("INTERNAL_ERROR", "No se pudieron obtener los planes.", 500, undefined, {
-      cause: error,
-    });
-  }
+  const { data, error, status } = await query.returns<PlanQueryRow[]>();
+  if (error) throwPostgrestError(error, "No se pudieron obtener los planes.", status);
 
   const plans: PlanView[] = (data ?? []).map((row) => ({
     id: row.id,

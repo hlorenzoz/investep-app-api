@@ -1,4 +1,4 @@
-import { AppError } from "../../lib/errors";
+import { throwPostgrestError } from "../../lib/postgres-error";
 import type { AppSupabaseClient } from "../../lib/supabase";
 
 export type AccountType = "equity" | "options";
@@ -92,25 +92,21 @@ function mapAllocation(row: AllocationQueryRow): AllocationRow {
   };
 }
 
-function fail(cause: unknown, message: string): never {
-  throw new AppError("INTERNAL_ERROR", message, 500, undefined, { cause });
-}
-
 export function createSupabaseCapitalRepository(admin: AppSupabaseClient): CapitalRepository {
   return {
     async getCapital(userId) {
-      const { data, error } = await admin
+      const { data, error, status } = await admin
         .from("user_capital")
         .select("total_capital, currency")
         .eq("user_id", userId)
         .maybeSingle();
-      if (error) fail(error, "No se pudo leer el capital.");
+      if (error) throwPostgrestError(error, "No se pudo leer el capital.", status);
       if (!data) return null;
       return { totalCapital: Number(data.total_capital), currency: data.currency };
     },
 
     async upsertCapital(userId, input) {
-      const { data, error } = await admin
+      const { data, error, status } = await admin
         .from("user_capital")
         .upsert(
           { user_id: userId, total_capital: input.totalCapital, currency: input.currency },
@@ -118,34 +114,34 @@ export function createSupabaseCapitalRepository(admin: AppSupabaseClient): Capit
         )
         .select("total_capital, currency")
         .single();
-      if (error || !data) fail(error, "No se pudo guardar el capital.");
+      if (error || !data) throwPostgrestError(error, "No se pudo guardar el capital.", status);
       return { totalCapital: Number(data.total_capital), currency: data.currency };
     },
 
     async listAllocations(userId) {
-      const { data, error } = await admin
+      const { data, error, status } = await admin
         .from("broker_allocations")
         .select(ALLOCATION_SELECT)
         .eq("user_id", userId)
         .order("created_at")
         .returns<AllocationQueryRow[]>();
-      if (error) fail(error, "No se pudieron leer las asignaciones.");
+      if (error) throwPostgrestError(error, "No se pudieron leer las asignaciones.", status);
       return (data ?? []).map(mapAllocation);
     },
 
     async getAllocation(userId, id) {
-      const { data, error } = await admin
+      const { data, error, status } = await admin
         .from("broker_allocations")
         .select(ALLOCATION_SELECT)
         .eq("user_id", userId)
         .eq("id", id)
         .maybeSingle<AllocationQueryRow>();
-      if (error) fail(error, "No se pudo leer la asignación.");
+      if (error) throwPostgrestError(error, "No se pudo leer la asignación.", status);
       return data ? mapAllocation(data) : null;
     },
 
     async createAllocation(userId, input) {
-      const { data, error } = await admin
+      const { data, error, status } = await admin
         .from("broker_allocations")
         .insert({
           user_id: userId,
@@ -157,12 +153,12 @@ export function createSupabaseCapitalRepository(admin: AppSupabaseClient): Capit
         })
         .select(ALLOCATION_SELECT)
         .single<AllocationQueryRow>();
-      if (error || !data) fail(error, "No se pudo crear la asignación.");
+      if (error || !data) throwPostgrestError(error, "No se pudo crear la asignación.", status);
       return mapAllocation(data);
     },
 
     async updateAllocation(userId, id, patch) {
-      const { data, error } = await admin
+      const { data, error, status } = await admin
         .from("broker_allocations")
         .update({
           investment_plan_id: patch.investmentPlanId,
@@ -173,28 +169,29 @@ export function createSupabaseCapitalRepository(admin: AppSupabaseClient): Capit
         .eq("id", id)
         .select(ALLOCATION_SELECT)
         .single<AllocationQueryRow>();
-      if (error || !data) fail(error, "No se pudo actualizar la asignación.");
+      if (error || !data)
+        throwPostgrestError(error, "No se pudo actualizar la asignación.", status);
       return mapAllocation(data);
     },
 
     async deleteAllocation(userId, id) {
-      const { data, error } = await admin
+      const { data, error, status } = await admin
         .from("broker_allocations")
         .delete()
         .eq("user_id", userId)
         .eq("id", id)
         .select("id");
-      if (error) fail(error, "No se pudo borrar la asignación.");
+      if (error) throwPostgrestError(error, "No se pudo borrar la asignación.", status);
       return (data?.length ?? 0) > 0;
     },
 
     async getPlan(planId) {
-      const { data, error } = await admin
+      const { data, error, status } = await admin
         .from("investment_plans")
         .select("id, account_type, target_monthly_pct")
         .eq("id", planId)
         .maybeSingle();
-      if (error) fail(error, "No se pudo leer el plan.");
+      if (error) throwPostgrestError(error, "No se pudo leer el plan.", status);
       if (!data) return null;
       return {
         id: data.id,
@@ -204,12 +201,12 @@ export function createSupabaseCapitalRepository(admin: AppSupabaseClient): Capit
     },
 
     async getBroker(brokerId) {
-      const { data, error } = await admin
+      const { data, error, status } = await admin
         .from("brokers")
         .select("id, slug")
         .eq("id", brokerId)
         .maybeSingle();
-      if (error) fail(error, "No se pudo leer el broker.");
+      if (error) throwPostgrestError(error, "No se pudo leer el broker.", status);
       return data ? { id: data.id, slug: data.slug } : null;
     },
   };
