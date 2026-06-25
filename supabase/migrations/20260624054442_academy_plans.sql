@@ -111,25 +111,37 @@ create trigger academy_memberships_set_updated_at before update on public.academ
 -- ============================================================
 -- RLS — catálogos y traducciones: lectura autenticados, escritura solo service role
 -- ============================================================
+-- Grants explícitos (Supabase ya no auto-expone tablas nuevas — ver initial_schema).
+-- service_role: DML completo. authenticated: SELECT para que la policy evalúe.
 alter table public.investep_plans enable row level security;
 create policy investep_plans_read_authenticated on public.investep_plans
   for select to authenticated using (true);
+grant select on public.investep_plans to authenticated;
+grant select, insert, update, delete on public.investep_plans to service_role;
 
 alter table public.investep_plan_translations enable row level security;
 create policy investep_plan_translations_read_authenticated on public.investep_plan_translations
   for select to authenticated using (true);
+grant select on public.investep_plan_translations to authenticated;
+grant select, insert, update, delete on public.investep_plan_translations to service_role;
 
 alter table public.investep_features enable row level security;
 create policy investep_features_read_authenticated on public.investep_features
   for select to authenticated using (true);
+grant select on public.investep_features to authenticated;
+grant select, insert, update, delete on public.investep_features to service_role;
 
 alter table public.investep_feature_translations enable row level security;
 create policy investep_feature_translations_read_authenticated on public.investep_feature_translations
   for select to authenticated using (true);
+grant select on public.investep_feature_translations to authenticated;
+grant select, insert, update, delete on public.investep_feature_translations to service_role;
 
 alter table public.investep_plan_features enable row level security;
 create policy investep_plan_features_read_authenticated on public.investep_plan_features
   for select to authenticated using (true);
+grant select on public.investep_plan_features to authenticated;
+grant select, insert, update, delete on public.investep_plan_features to service_role;
 
 -- ============================================================
 -- RLS — academy_memberships: dato de usuario → deny-by-default, solo service role
@@ -137,3 +149,4 @@ create policy investep_plan_features_read_authenticated on public.investep_plan_
 alter table public.academy_memberships enable row level security;
 alter table public.academy_memberships force row level security;
 revoke all on public.academy_memberships from anon, authenticated;
+grant select, insert, update, delete on public.academy_memberships to service_role;

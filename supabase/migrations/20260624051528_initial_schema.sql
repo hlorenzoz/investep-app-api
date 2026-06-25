@@ -150,33 +150,52 @@ create trigger accounts_set_updated_at before update on public.accounts
 -- ============================================================
 -- RLS — datos de usuario: deny-by-default, solo service role (API)
 -- ============================================================
+-- Grants explícitos a service_role: Supabase desactivó el auto-expose de tablas
+-- nuevas (config.toml api.auto_expose_new_tables sin setear → default nuevo del
+-- cloud). Sin estos GRANT, PostgREST devuelve 42501 (permission denied) y la API
+-- responde 500. El acceso a datos de usuario es SOLO vía service_role (la API
+-- filtra por user_id); anon/authenticated quedan denegados (revoke + RLS).
 alter table public.profiles enable row level security;
 alter table public.profiles force row level security;
 revoke all on public.profiles from anon, authenticated;
+grant select, insert, update, delete on public.profiles to service_role;
 
 alter table public.broker_connections enable row level security;
 alter table public.broker_connections force row level security;
 revoke all on public.broker_connections from anon, authenticated;
+grant select, insert, update, delete on public.broker_connections to service_role;
 
 alter table public.accounts enable row level security;
 alter table public.accounts force row level security;
 revoke all on public.accounts from anon, authenticated;
+grant select, insert, update, delete on public.accounts to service_role;
 
 -- ============================================================
 -- RLS — catálogos y traducciones: lectura autenticados, escritura solo service role
 -- ============================================================
+-- service_role: DML completo (la API lee y, eventualmente, administra catálogos).
+-- authenticated: SELECT explícito para que la policy de lectura pueda evaluarse
+-- (RLS necesita el GRANT de tabla además de la policy).
 alter table public.locales enable row level security;
 create policy locales_read_authenticated on public.locales
   for select to authenticated using (true);
+grant select on public.locales to authenticated;
+grant select, insert, update, delete on public.locales to service_role;
 
 alter table public.brokers enable row level security;
 create policy brokers_read_authenticated on public.brokers
   for select to authenticated using (true);
+grant select on public.brokers to authenticated;
+grant select, insert, update, delete on public.brokers to service_role;
 
 alter table public.investment_plans enable row level security;
 create policy investment_plans_read_authenticated on public.investment_plans
   for select to authenticated using (true);
+grant select on public.investment_plans to authenticated;
+grant select, insert, update, delete on public.investment_plans to service_role;
 
 alter table public.investment_plan_translations enable row level security;
 create policy investment_plan_translations_read_authenticated on public.investment_plan_translations
   for select to authenticated using (true);
+grant select on public.investment_plan_translations to authenticated;
+grant select, insert, update, delete on public.investment_plan_translations to service_role;

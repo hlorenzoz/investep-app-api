@@ -48,10 +48,14 @@ create trigger broker_allocations_set_updated_at
   for each row execute function public.set_updated_at();
 
 -- RLS deny-all: sin políticas; acceso solo por service-role (la API filtra por user_id).
+-- Grants explícitos a service_role (Supabase ya no auto-expone tablas nuevas — ver
+-- initial_schema). Sin esto, PostgREST devuelve 42501 y la API responde 500.
 alter table public.user_capital enable row level security;
 alter table public.user_capital force row level security;
 revoke all on public.user_capital from anon, authenticated;
+grant select, insert, update, delete on public.user_capital to service_role;
 
 alter table public.broker_allocations enable row level security;
 alter table public.broker_allocations force row level security;
 revoke all on public.broker_allocations from anon, authenticated;
+grant select, insert, update, delete on public.broker_allocations to service_role;
