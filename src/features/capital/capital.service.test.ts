@@ -183,6 +183,17 @@ describe("setCapital", () => {
     const result = await setCapital(repo, U, { totalCapital: 6000, currency: "USD" });
     expect(result.totalCapital).toBe(6000);
   });
+
+  it("permite bajar el capital justo hasta lo ya asignado (borde ==)", async () => {
+    const repo = makeRepo({
+      capital: { [U]: { totalCapital: 5000, currency: "USD" } },
+      allocations: [alloc(U, { id: "a1", initialDeposit: 4000, currency: "USD" })],
+    });
+    // 4000 === asignado: el chequeo es `< allocated`, el borde exacto debe permitirse.
+    // Mata la mutación `<` -> `<=` (que rechazaría la igualdad).
+    const result = await setCapital(repo, U, { totalCapital: 4000, currency: "USD" });
+    expect(result.totalCapital).toBe(4000);
+  });
 });
 
 describe("createAllocation", () => {
@@ -261,6 +272,47 @@ describe("createAllocation", () => {
       }),
     ).rejects.toMatchObject({ code: "CONFLICT", status: 409 });
   });
+
+  it("permite la asignación que llena el capital exactamente (borde ==)", async () => {
+    const repo = makeRepo({
+      capital: { [U]: { totalCapital: 5000, currency: "USD" } },
+      allocations: [
+        alloc(U, { id: "a1", brokerId: 10, accountType: "equity", initialDeposit: 4000 }),
+      ],
+    });
+    // 4000 + 1000 === 5000: el chequeo es `> totalCapital`, el borde exacto entra.
+    // Mata la mutación `>` -> `>=`.
+    const result = await createAllocation(repo, U, {
+      brokerId: 11,
+      investmentPlanId: 1,
+      initialDeposit: 1000,
+    });
+    expect(result.initialDeposit).toBe(1000);
+  });
+
+  it("permite una segunda asignación al mismo broker con distinto account_type", async () => {
+    const repo = makeRepo({
+      capital: { [U]: { totalCapital: 10000, currency: "USD" } },
+      allocations: [
+        alloc(U, {
+          id: "a1",
+          brokerId: 10,
+          accountType: "equity",
+          investmentPlanId: 1,
+          initialDeposit: 1000,
+        }),
+      ],
+    });
+    // El duplicado se mide por (broker + account_type). Mismo broker, plan options (3) -> permitido.
+    // Mata la mutación que ignore account_type en el chequeo de duplicado.
+    const result = await createAllocation(repo, U, {
+      brokerId: 10,
+      investmentPlanId: 3,
+      initialDeposit: 1000,
+    });
+    expect(result.accountType).toBe("options");
+    expect(result.brokerId).toBe(10);
+  });
 });
 
 describe("updateAllocation", () => {
@@ -323,6 +375,20 @@ describe("updateAllocation", () => {
       updateAllocation(repoWith(), U, "a1", { initialDeposit: 6000 }),
     ).rejects.toMatchObject({ code: "CONFLICT", status: 409 });
   });
+
+  it("excluye el depósito propio al validar contra el capital (multi-asignación, borde ==)", async () => {
+    const repo = makeRepo({
+      capital: { [U]: { totalCapital: 5000, currency: "USD" } },
+      allocations: [
+        alloc(U, { id: "a1", brokerId: 10, accountType: "equity", initialDeposit: 3000 }),
+        alloc(U, { id: "a2", brokerId: 11, accountType: "options", initialDeposit: 1000 }),
+      ],
+    });
+    // Subir a1 a 4000: (otras = 1000) + 4000 === 5000 -> entra SOLO si se excluye el viejo 3000.
+    // Mata dos mutaciones: quitar `excludeId` (daría 3000+1000+4000 > 5000 -> 409) y `>` -> `>=`.
+    const result = await updateAllocation(repo, U, "a1", { initialDeposit: 4000 });
+    expect(result.initialDeposit).toBe(4000);
+  });
 });
 
 describe("deleteAllocation", () => {
@@ -339,5 +405,45 @@ describe("deleteAllocation", () => {
       code: "NOT_FOUND",
       status: 404,
     });
+  });
+});
+
+/**
+ * Property-based "casero" y DETERMINISTA: el stack no trae fast-check y se podó el tooling
+ * a propósito (AGENTS.md §13), así que generamos los casos con un LCG sembrado (reproducible,
+ * sin flakiness) y verificamos INVARIANTES de cálculo en vez de casos puntuales.
+ */
+function makeRng(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0xffffffff;
+  };
+}
+
+describe("getCapitalView — invariantes de cálculo (property-based determinista)", () => {
+  it("totalAllocated = Σ depósitos y available = capital - totalAllocated (200 casos)", async () => {
+    const rng = makeRng(0xc0ffee);
+    for (let i = 0; i < 200; i++) {
+      const hasCapital = rng() > 0.2;
+      const totalCapital = Math.round(rng() * 100000) / 100;
+      const n = Math.floor(rng() * 6); // 0..5 asignaciones
+      const allocations = Array.from({ length: n }, (_, k) =>
+        alloc(U, { id: `p-${i}-${k}`, initialDeposit: Math.round(rng() * 20000) / 100 }),
+      );
+      const repo = makeRepo({
+        capital: hasCapital ? { [U]: { totalCapital, currency: "USD" } } : {},
+        allocations,
+      });
+
+      const view = await getCapitalView(repo, U);
+      const expectedTotal = allocations.reduce((s, a) => s + a.row.initialDeposit, 0);
+      const expectedCapital = hasCapital ? totalCapital : 0;
+
+      // Invariantes que deben valer para CUALQUIER entrada:
+      expect(view.totalAllocated).toBeCloseTo(expectedTotal, 6);
+      expect(view.available).toBeCloseTo(expectedCapital - expectedTotal, 6);
+      expect(view.totalAllocated + view.available).toBeCloseTo(expectedCapital, 6);
+    }
   });
 });

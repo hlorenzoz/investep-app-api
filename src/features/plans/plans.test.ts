@@ -126,8 +126,23 @@ describe("GET /plans", () => {
     expect(body.plans[0]?.label).toBeNull();
   });
 
-  it("500 cuando la query a la base falla", async () => {
+  it("503 cuando Supabase está caído (5xx transitorio)", async () => {
+    // outage/red caída → reintentable. Consistente con /capital y el middleware de auth.
     mockFetch({ message: "boom", code: "", details: "", hint: "" }, 500);
+
+    const res = await createApp().request(
+      "/plans",
+      { headers: { Authorization: "Bearer t" } },
+      ENV,
+    );
+
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("SERVICE_UNAVAILABLE");
+  });
+
+  it("500 ante un error genuino de PostgREST (4xx no transitorio)", async () => {
+    mockFetch({ message: "boom", code: "", details: "", hint: "" }, 400);
 
     const res = await createApp().request(
       "/plans",

@@ -59,6 +59,7 @@ interface Cfg {
   updated?: AllocDb;
   deleted?: { id: string }[];
   errorOn?: string;
+  errorStatus?: number;
 }
 
 /** Mock de fetch que enruta auth + PostgREST por tabla/método/filtro. */
@@ -71,7 +72,7 @@ function mockSupabase(cfg: Cfg = {}) {
       return json({ id: "user-1", email: "u@example.com", user_metadata: {} });
     }
     if (cfg.errorOn && url.includes(cfg.errorOn)) {
-      return json({ message: "boom", code: "", details: "", hint: "" }, 500);
+      return json({ message: "boom", code: "", details: "", hint: "" }, cfg.errorStatus ?? 500);
     }
     if (url.includes("/user_capital")) {
       if (method === "POST") {
@@ -279,9 +280,68 @@ describe("capital endpoints", () => {
     expect(res.status).toBe(404);
   });
 
-  it("500 cuando la base falla (rama de error del repository)", async () => {
-    mockSupabase({ errorOn: "/user_capital" });
+  it("503 cuando Supabase está caído (5xx transitorio del repository)", async () => {
+    // outage/red caída → reintentable. NO debe ser 500 (no es un bug nuestro) ni 401.
+    mockSupabase({ errorOn: "/user_capital", errorStatus: 500 });
+    const res = await createApp().request("/capital", AUTH, ENV);
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("SERVICE_UNAVAILABLE");
+  });
+
+  it("500 ante un error genuino de PostgREST (4xx no transitorio)", async () => {
+    // 4xx = problema de la request, no un outage → error interno (no reintentable).
+    mockSupabase({ errorOn: "/user_capital", errorStatus: 400 });
     const res = await createApp().request("/capital", AUTH, ENV);
     expect(res.status).toBe(500);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("INTERNAL_ERROR");
+  });
+
+  it("PATCH con id malformado (no-UUID) → 422 (Zod param)", async () => {
+    // Auth válido; falla la validación del param `id` ANTES de tocar el handler.
+    // Mata la mutación que quite `.uuid()` del param (devolvería 404 en vez de 422).
+    mockSupabase({});
+    const res = await createApp().request(
+      "/capital/allocations/not-a-uuid",
+      { ...JSON_AUTH, method: "PATCH", body: JSON.stringify({ initialDeposit: 2000 }) },
+      ENV,
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it("PUT /capital con currency malformada → 422 (Zod regex)", async () => {
+    // "us" no matchea ^[A-Z]{3}$ -> 422. Mata la mutación que afloje el regex de currency.
+    mockSupabase({});
+    const res = await createApp().request(
+      "/capital",
+      { ...JSON_AUTH, method: "PUT", body: JSON.stringify({ totalCapital: 5000, currency: "us" }) },
+      ENV,
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it("GET /capital no hace N+1: round-trips REST constantes ante más asignaciones", async () => {
+    // listAllocations usa un select con joins embebidos (brokers/investment_plans): una sola
+    // query, no una por asignación. Contamos los fetch a PostgREST (descontando el de auth)
+    // con 1 vs 4 asignaciones; deben ser IGUALES. Mata una regresión N+1 (p.ej. getBroker por fila).
+    const countRest = async (allocations: AllocDb[]) => {
+      mockSupabase({ capital: { total_capital: "100000.00", currency: "USD" }, allocations });
+      const fetchMock = globalThis.fetch as unknown as { mock: { calls: unknown[][] } };
+      await createApp().request("/capital", AUTH, ENV);
+      return fetchMock.mock.calls.filter((call) => !String(call[0]).includes("/auth/v1/user"))
+        .length;
+    };
+
+    const one = await countRest([allocDb({ id: UUID, initial_deposit: "1000.00" })]);
+    const many = await countRest([
+      allocDb({ id: UUID, initial_deposit: "1000.00" }),
+      allocDb({ id: "a2", broker_id: 11, initial_deposit: "2000.00" }),
+      allocDb({ id: "a3", broker_id: 12, initial_deposit: "500.00" }),
+      allocDb({ id: "a4", broker_id: 13, initial_deposit: "500.00" }),
+    ]);
+
+    expect(many).toBe(one); // independiente de N → no hay N+1
+    expect(one).toBe(2); // getCapital + listAllocations
   });
 });
