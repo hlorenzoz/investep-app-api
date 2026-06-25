@@ -33,3 +33,7 @@ coverage/
 /test-results/
 /playwright-report/
 /blob-report/
+
+# Agentes de IA
+.agents/skills/**
+.claude/skills/**
