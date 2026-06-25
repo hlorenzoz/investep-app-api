@@ -167,24 +167,39 @@ export type Database = {
       brokers: {
         Row: {
           created_at: string
+          favicon: string | null
+          icon: string | null
           id: number
+          logo: string | null
           name: string
           slug: string
           updated_at: string
+          url: string
+          url_secondary: string | null
         }
         Insert: {
           created_at?: string
+          favicon?: string | null
+          icon?: string | null
           id?: never
+          logo?: string | null
           name: string
           slug: string
           updated_at?: string
+          url: string
+          url_secondary?: string | null
         }
         Update: {
           created_at?: string
+          favicon?: string | null
+          icon?: string | null
           id?: never
+          logo?: string | null
           name?: string
           slug?: string
           updated_at?: string
+          url?: string
+          url_secondary?: string | null
         }
         Relationships: []
       }
