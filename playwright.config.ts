@@ -5,8 +5,8 @@ import { defineConfig } from "@playwright/test";
  * así que los E2E usan el `request` context contra la API levantada de verdad.
  *
  * El `webServer` levanta la API local (Bun) con los secretos de `.dev.vars`. Requiere el
- * Supabase local corriendo (`just supabase-start`) para que `/health/ready` dé `up`.
- * Si ya hay una API escuchando en el puerto (p. ej. `just docker-up`), la reutiliza.
+ * stack arriba (`just up`) para que `/health/ready` dé `up`.
+ * Si ya hay una API escuchando en el puerto (el servicio `api` del stack), la reutiliza.
  */
 export default defineConfig({
   testDir: "./e2e",

@@ -19,7 +19,7 @@ dev:
 test:
     bun test src tests
 
-# Tests E2E (Playwright API testing). Requiere `just supabase-start` + la API accesible.
+# Tests E2E (Playwright API testing). Requiere el stack arriba (`just up`).
 e2e:
     bunx playwright test
 
@@ -98,37 +98,52 @@ token EMAIL="" PASSWORD="":
 precommit:
     pre-commit run --all-files
 
-# --- Supabase (stack local en Docker) ---
+# --- Pruebas de carga (k6) — ver load/README.md ---
+# Requieren el stack arriba (`just up`) + el usuario admin (`just create-first-user`).
+# El bridge scripts/k6-run.ts pasa los secretos por environment (no por la cmdline).
 
-# Levantar Supabase local en Docker (excluye Storage/Realtime/analytics que no usamos)
-supabase-start:
-    supabase start -x storage-api,imgproxy,realtime,edge-runtime,vector
+# Smoke SIN auth: liveness + readiness. Corre siempre (no requiere credenciales).
+load-smoke:
+    bun run scripts/k6-run.ts load/smoke.js
 
-# Parar el stack local (conserva los datos del volumen)
-supabase-stop:
-    supabase stop
+# Carga sostenida en endpoints de lectura (/capital, /plans). Requiere credenciales de usuario.
+load:
+    bun run scripts/k6-run.ts load/read-load.js
 
-# Estado y credenciales del stack local (URL, anon/service keys, Studio)
-supabase-status:
-    supabase status
+# Estrés creciente hasta saturar. Mismos prerrequisitos que `just load`.
+load-stress:
+    bun run scripts/k6-run.ts load/read-stress.js
 
-# Resetear la base local: re-aplica migraciones + seed. DESTRUCTIVO.
-supabase-reset:
-    supabase db reset
+# --- Stack local: Supabase self-hosting (oficial) + API, todo en Docker ---
+# Primera vez: `cp .env.example .env`. Studio: http://127.0.0.1:54321 (basic-auth DASHBOARD_*).
 
-# Abrir el dashboard local (Supabase Studio) en el navegador
-supabase-studio:
-    open http://127.0.0.1:54323
+alias docker-up := up
+alias docker-down := down
 
-# Generar tipos TypeScript del schema local (regenerar tras cada migración)
-supabase-types:
-    supabase gen types typescript --local > src/types/database.types.ts
-
-# --- Docker (API local sobre Bun, para integrar con Flutter) ---
-
-# Levantar la API en Docker (requiere `just supabase-start` corriendo aparte)
-docker-up:
+# Levantar TODO el stack (Supabase + API + migraciones). Idempotente.
+up:
     docker compose up --build -d
+
+# Bajar el stack (conserva los datos del volumen)
+down:
+    docker compose down
+
+# Estado de los contenedores del stack
+status:
+    docker compose ps
+
+# Resetear la base: volumen fresco → re-aplica migraciones + seeds. DESTRUCTIVO.
+db-reset:
+    docker compose down -v
+    docker compose up --build -d
+
+# Abrir Supabase Studio (vía Kong; basic-auth DASHBOARD_USERNAME/PASSWORD del .env)
+studio:
+    open http://127.0.0.1:54321
+
+# Generar tipos TS del schema (apunta al Postgres del stack en 127.0.0.1:54322)
+types:
+    supabase gen types typescript --db-url postgresql://postgres:postgres@127.0.0.1:54322/postgres > src/types/database.types.ts
 
 # Desarrollo con hot reload (Docker Compose Watch: sync de src/ + rebuild si cambian deps)
 watch:
@@ -137,7 +152,3 @@ watch:
 # Ver logs de la API en Docker
 docker-logs:
     docker compose logs -f api
-
-# Bajar la API en Docker
-docker-down:
-    docker compose down

@@ -34,6 +34,11 @@ coverage/
 /playwright-report/
 /blob-report/
 
+# Supabase self-hosting (docker) — datos/runtime, NUNCA commitear.
+# La config vendorizada (volumes/api, volumes/db/*.sql, volumes/migrate, etc.) SÍ se versiona.
+/volumes/db/data/
+/volumes/storage/
+
 # Agentes de IA
 .agents/skills/**
 .claude/skills/**

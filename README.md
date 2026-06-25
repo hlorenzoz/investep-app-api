@@ -11,21 +11,22 @@ plataforma y seguridad.
 
 - [Bun](https://bun.sh) ≥ 1.3 (gestor de paquetes y runtime de tooling — **no** npm/yarn/pnpm)
 - [Just](https://github.com/casey/just) (runner de tareas)
-- [Docker](https://www.docker.com) (Supabase local + API en contenedor)
-- [Supabase CLI](https://supabase.com/docs/guides/cli) (`brew install supabase/tap/supabase`)
+- [Docker](https://www.docker.com) (corre TODO el stack: Supabase self-hosting + API)
+- [Supabase CLI](https://supabase.com/docs/guides/cli) (`brew install supabase/tap/supabase`) — solo para `just types` y `just db-push` (no para el runtime local)
 - [pre-commit](https://pre-commit.com) (hooks de calidad)
 
 ## Arranque rápido (entorno devel)
 
 ```bash
 just install                     # bun install
-just supabase-start              # Supabase local en Docker (Postgres + Auth + Studio) + migraciones
-cp .dev.vars.example .dev.vars   # completá con las credenciales de `just supabase-status`
+cp .env.example .env             # config del stack Supabase (valores demo, local)
+cp .dev.vars.example .dev.vars   # secretos de la API (claves demo del CLI = las del .env)
+just up                          # Supabase self-hosting + API + migraciones, todo en Docker
 
-# Opción A — API en Docker (Bun) con hot reload, lista para integrar Flutter:
+# Hot reload de la API (Docker Compose Watch):
 just watch                       # → http://localhost:8787
 
-# Opción B — wrangler dev (runtime real de Workers) en el host:
+# Alternativa — wrangler dev (runtime real de Workers) en el host (requiere `just up` para Supabase):
 just dev                         # → http://localhost:8787
 ```
 
@@ -62,12 +63,12 @@ es vía `@supabase/supabase-js` (cliente HTTP/REST, tipado con los tipos generad
 al usuario es **multilingüe** (tablas `*_translations` + `locales`, idioma base `es`).
 
 ```bash
-just supabase-start    # levantar el stack local (aplica migraciones)
-just supabase-status   # URL + keys locales + Studio
-just supabase-studio   # abrir Studio → http://127.0.0.1:54323
-just supabase-reset    # recrear la base local: migraciones + seed (DESTRUCTIVO)
-just supabase-types    # generar src/types/database.types.ts (regenerar tras cada migración)
-just supabase-stop     # parar el stack
+just up         # levantar el stack (Supabase + API) + aplicar migraciones
+just status     # estado de los contenedores
+just studio     # abrir Studio → http://127.0.0.1:54321 (basic-auth DASHBOARD_* del .env)
+just db-reset   # recrear la base: volumen fresco → migraciones + seeds (DESTRUCTIVO)
+just types      # generar src/types/database.types.ts (regenerar tras cada migración)
+just down       # parar el stack
 ```
 
 ## Entornos
@@ -91,15 +92,20 @@ just deploy-staging     # desplegar a staging   (idem deploy-production)
 
 ## Docker
 
+El `compose.yaml` levanta el **stack completo**: Supabase self-hosting (oficial, vendorizado en
+`volumes/`) + el servicio `api` (Bun) + un servicio one-shot `migrate` que aplica las migraciones.
+Config en `.env` (copiá de `.env.example`; valores demo locales). Kong se publica en
+`127.0.0.1:54321` (igual que el CLI) → `.dev.vars` no cambia.
+
 ```bash
-just docker-up      # levantar la API en Docker (requiere supabase-start aparte)
-just watch          # idem + hot reload (Docker Compose Watch)
-just docker-logs    # ver logs
-just docker-down    # bajar
+just up         # levantar TODO (Supabase + API + migraciones)
+just watch      # idem + hot reload de la API (Docker Compose Watch)
+just docker-logs  # logs de la API
+just down       # bajar
 ```
 
-La imagen (`oven/bun:alpine`) se conecta a Supabase por la **red interna de Docker** y expone un
-`healthcheck` contra `/health/ready`.
+La API (`oven/bun:alpine`) se conecta a Supabase por la **red interna de Docker**
+(`http://kong:8000`) y expone un `healthcheck` contra `/health/ready`.
 
 ## Calidad
 
@@ -108,7 +114,7 @@ just lint     # biome check + tsc --noEmit
 just format   # biome format --write
 just fix      # biome check --write (autofix)
 just test     # bun test src tests (unit + contrato)
-just e2e      # Playwright API testing (e2e/; requiere supabase-start + API levantada)
+just e2e      # Playwright API testing (e2e/; requiere el stack arriba con `just up`)
 just precommit  # hooks de pre-commit sobre todo el repo
 just typegen  # tipos de los bindings de Wrangler
 ```

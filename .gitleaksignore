@@ -1,0 +1,9 @@
+# Allowlist de gitleaks — SOLO valores demo PÚBLICOS de Supabase local en .env.example.
+# Son las claves well-known del stack self-hosting local (idénticas en toda instalación
+# de Supabase docker); NO son secretos reales. Se commitean a propósito para que
+# `cp .env.example .env` deje el entorno local funcionando out-of-the-box.
+# Los secretos REALES (staging/producción) viven en .dev.vars.<env> (gitignored), nunca acá.
+.env.example:jwt:17
+.env.example:jwt:18
+.env.example:generic-api-key:31
+.env.example:generic-api-key:108
