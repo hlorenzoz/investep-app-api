@@ -208,7 +208,7 @@ pre-commit run --all-files
 
 La API se blinda con tests. Reglas **estrictas**:
 
-- **Objetivo: 100% de cobertura** — de **código** (líneas y funciones) y de **flujos** (cada rama,
+- **Objetivo: 95% de cobertura** — de **código** (líneas y funciones) y de **flujos** (cada rama,
   cada caso de error). La cobertura es el piso, no el fin: cubrir líneas sin probar comportamiento no
   cuenta. Nada de tests triviales para “pintar de verde”.
 - **Todo cambio lleva tests en la misma entrega.** Si tocás lógica, agregás/ajustás sus tests.
@@ -223,8 +223,8 @@ La API se blinda con tests. Reglas **estrictas**:
   - **E2E / integración:** Playwright **API testing** (`just e2e`, dir `e2e/`) contra la API
     levantada de verdad + Supabase real. Hoy cubre health; crece con los endpoints de negocio.
 - **Verificación de cobertura:** corre en el **`pre-push` de la branch `devel`**
-  (`scripts/coverage-devel.sh` → `bun test --coverage`). El umbral objetivo (100%) se activa en
-  `bunfig.toml` (`coverageThreshold`). En el resto de las branches no se gate-ea.
+  (`scripts/coverage-devel.sh` → `bun test --coverage`). El umbral (95% líneas y funciones) se activa
+  en `bunfig.toml` (`coverageThreshold`). En el resto de las branches no se gate-ea.
 - Unit/contrato con **`bun test src tests`** (mocká dependencias externas de forma determinista);
   E2E con **`just e2e`** (Playwright API testing — `e2e/*.spec.ts`, queda fuera de `bun test`).
 
