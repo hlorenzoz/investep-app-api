@@ -240,3 +240,27 @@ La API se blinda con tests. Reglas **estrictas**:
   rate-limit, etc.).
 - **NUNCA loguear** (§5): tokens, credenciales, keys, JWTs, ni datos de cuenta/cartera
   identificables. Ante la duda, no lo loguees: sanitizá antes de registrar.
+
+## 13. Router de skills de IA (cuándo usar cada una)
+
+Las skills viven en `.claude/skills/` (la mayoría son symlinks a `.agents/skills/`) más algún
+directorio propio. **Ambos directorios están gitignored**: solo se versiona `skills-lock.json`
+(manifiesto con origen + hash de cada skill sincronizada desde GitHub). Una skill se carga
+**automáticamente** cuando el contexto matchea su `description`/trigger, o **a mano** con
+`/nombre-skill`.
+
+> El inventario se podó a propósito: solo quedan skills del stack real (Hono + Workers + Supabase +
+> **Bun test**). Se quitaron las que venían en el bundle pero eran de otros proyectos (frontend React
+> de **Supabase Studio**, Vercel, `vitest`) o de otra librería de auth (**Better Auth** — acá usamos
+> **Supabase Auth**). Si reaparecen, no las sigas: confirmá que apliquen a **esta** API antes.
+
+| Skill | Cuándo usarla |
+|-------|---------------|
+| `hono` | Crear/editar rutas, middleware, validación, JSX o tests de Hono; cualquier import de `hono`/`hono/*`. **Punto de partida** para todo lo de la API. |
+| `hono-api-scaffolder` | Andamiar un endpoint nuevo en Workers: archivo de ruta + binding tipado + Zod + manejo de error + doc. Respetá el contrato OpenAPI (§4). *(claude-code-only)* |
+| `hono-cloudflare` | Referencia de bindings de Workers (KV, R2, D1, Durable Objects) y patrones edge al montar Hono. *(Reference: trae `disable-model-invocation` → no se auto-invoca, consultala a mano.)* |
+| `supabase` | CUALQUIER tarea de Supabase: DB, Auth, Storage, Realtime, RLS, migraciones, CLI/MCP. |
+| `supabase-server` | **Antes** de escribir/editar handlers que importen `@supabase/server` (`withSupabase`, `verifyAuth`, modos `auth:`) o al migrar patrones legacy (`Deno.serve`, `SUPABASE_SERVICE_ROLE_KEY`). Hoy `src/` aún no lo importa → relevante en cuanto agregues verificación de auth de entrada. |
+| `supabase-postgres-best-practices` | Escribir u optimizar queries Postgres, diseño de schema, índices, migraciones, planes de ejecución. |
+| `security-audit` | Revisión de seguridad / pentest: buscar vulnerabilidades explotables con impacto real. **Prioritaria** por ser fintech (§5). |
+| `safe-sql-execution` | Ejecutar SQL crudo contra la DB sin riesgo de inyección (parametrización, validación de entrada). Solo si hay SQL crudo. |
