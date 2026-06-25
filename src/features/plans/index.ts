@@ -1,10 +1,5 @@
-import { OpenAPIHono } from "@hono/zod-openapi";
-import type { AppBindings } from "../../types/app";
-
 /**
- * Dominio: PLANS — planes de inversión y contenido de la academia.
- *
- * Stub inicial. Seguí el patrón de `features/health/` para agregar endpoints
- * (rutas con `createRoute`, handlers tipados, router con `.openapi(...)`, tests).
+ * Dominio: PLANS — catálogo de planes de inversión (target mensual por tipo de cuenta).
+ * Barrera del feature: re-exporta el router HTTP (`GET /plans`).
  */
-export const plansRouter = new OpenAPIHono<AppBindings>();
+export { plansRouter } from "./plans.router";

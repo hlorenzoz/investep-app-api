@@ -1,6 +1,6 @@
 import type { Hook } from "@hono/zod-openapi";
+import type { Env } from "hono";
 import { ErrorSchema } from "../schemas/common";
-import type { AppBindings } from "../types/app";
 import { toErrorResponse } from "./errors";
 
 /**
@@ -31,13 +31,18 @@ export function jsonErrorResponse(description: string) {
 /**
  * Hook de validación por defecto de OpenAPIHono: toda falla de validación Zod en el borde
  * de la petición se traduce al formato de error único (AGENTS.md §4) con status 422.
- * Extraído acá (en vez de inline en `createApp`) para poder testearlo de forma aislada.
+ *
+ * Es una factory genérica por binding (`E`): cada router fija su `E` exacto. Necesario porque
+ * los sub-routers usan `AuthedBindings` y el app principal `AppBindings`, y el `Context` de Hono
+ * es invariante en sus `Variables` — un único hook tipado no sirve para ambos.
  */
-export const validationHook: Hook<unknown, AppBindings, string, unknown> = (result, c) => {
-  if (!result.success) {
-    return c.json(
-      toErrorResponse("VALIDATION_ERROR", "La solicitud no es válida.", result.error.issues),
-      422,
-    );
-  }
-};
+export function validationHook<E extends Env>(): Hook<unknown, E, string, unknown> {
+  return (result, c) => {
+    if (!result.success) {
+      return c.json(
+        toErrorResponse("VALIDATION_ERROR", "La solicitud no es válida.", result.error.issues),
+        422,
+      );
+    }
+  };
+}

@@ -126,6 +126,57 @@ export type Database = {
           },
         ]
       }
+      broker_allocations: {
+        Row: {
+          account_type: string
+          broker_id: number
+          created_at: string
+          currency: string
+          id: string
+          initial_deposit: number
+          investment_plan_id: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_type: string
+          broker_id: number
+          created_at?: string
+          currency?: string
+          id?: string
+          initial_deposit: number
+          investment_plan_id: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_type?: string
+          broker_id?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          initial_deposit?: number
+          investment_plan_id?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broker_allocations_broker_id_fkey"
+            columns: ["broker_id"]
+            isOneToOne: false
+            referencedRelation: "brokers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broker_allocations_plan_fk"
+            columns: ["investment_plan_id", "account_type"]
+            isOneToOne: false
+            referencedRelation: "investment_plans"
+            referencedColumns: ["id", "account_type"]
+          },
+        ]
+      }
       broker_connections: {
         Row: {
           alias: string | null
@@ -455,6 +506,30 @@ export type Database = {
           full_name?: string | null
           id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      user_capital: {
+        Row: {
+          created_at: string
+          currency: string
+          total_capital: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          total_capital: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          total_capital?: number
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

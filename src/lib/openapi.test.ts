@@ -5,7 +5,7 @@ import { validationHook } from "./openapi";
 
 /** App de prueba con una ruta que valida query, usando el validationHook real. */
 function appWithValidation() {
-  const app = new OpenAPIHono<AppBindings>({ defaultHook: validationHook });
+  const app = new OpenAPIHono<AppBindings>({ defaultHook: validationHook<AppBindings>() });
   const route = createRoute({
     method: "get",
     path: "/echo",

@@ -6,6 +6,7 @@ import { secureHeaders } from "hono/secure-headers";
 
 import { authRouter } from "./features/auth";
 import { brokersRouter } from "./features/brokers";
+import { capitalRouter } from "./features/capital";
 import { healthRouter } from "./features/health/health.router";
 import { plansRouter } from "./features/plans";
 import { portfolioRouter } from "./features/portfolio";
@@ -23,7 +24,7 @@ const OPENAPI_JSON_PATH = "/openapi.json";
 export function createApp() {
   const app = new OpenAPIHono<AppBindings>({
     // Toda falla de validación Zod sale con el formato de error único (AGENTS.md §4).
-    defaultHook: validationHook,
+    defaultHook: validationHook<AppBindings>(),
   });
 
   // Middleware base. OJO: no loguear cuerpos, headers ni datos sensibles (AGENTS.md §5).
@@ -37,6 +38,7 @@ export function createApp() {
   app.route("/health", healthRouter);
   app.route("/auth", authRouter);
   app.route("/plans", plansRouter);
+  app.route("/capital", capitalRouter);
   app.route("/portfolio", portfolioRouter);
   app.route("/brokers", brokersRouter);
 
