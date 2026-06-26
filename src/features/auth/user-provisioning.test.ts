@@ -303,9 +303,10 @@ describe("provisionUser", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // 5.9: user_metadata.must_reset_password: true en ambos paths
+  // 5.9: app_metadata.must_reset_password: true en ambos paths (control de seguridad
+  //       server-side; user_metadata sería apagable por el propio usuario)
   // ---------------------------------------------------------------------------
-  it("5.9a: createUser recibe user_metadata.must_reset_password: true (path creación)", async () => {
+  it("5.9a: createUser recibe app_metadata.must_reset_password: true (path creación)", async () => {
     let capturedArgs: unknown;
     const admin = makeAdmin({
       createUser: mock(async (opts: unknown) => {
@@ -324,12 +325,12 @@ describe("provisionUser", () => {
     );
 
     expect(
-      (capturedArgs as { user_metadata: { must_reset_password: boolean } }).user_metadata
+      (capturedArgs as { app_metadata: { must_reset_password: boolean } }).app_metadata
         .must_reset_password,
     ).toBe(true);
   });
 
-  it("5.9b: updateUserById recibe user_metadata.must_reset_password: true (path reset)", async () => {
+  it("5.9b: updateUserById recibe app_metadata.must_reset_password: true (path reset)", async () => {
     let capturedUpdateArgs: unknown;
     const existingUser: MockUser = { id: "uid-existing", email: "existing@example.com" };
 
@@ -361,7 +362,7 @@ describe("provisionUser", () => {
     );
 
     expect(
-      (capturedUpdateArgs as { user_metadata: { must_reset_password: boolean } }).user_metadata
+      (capturedUpdateArgs as { app_metadata: { must_reset_password: boolean } }).app_metadata
         .must_reset_password,
     ).toBe(true);
   });

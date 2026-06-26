@@ -5,7 +5,9 @@ import type { HealthRoute, ReadinessRoute } from "./health.routes";
 export const healthHandler: RouteHandler<HealthRoute, AppBindings> = (c) => {
   return c.json(
     {
-      status: "ok",
+      // `as const` evita que tsc ensanche "ok" a `string` (la inferencia literal de
+      // @hono/zod-openapi es frágil ante la carga total de tipos). Igual que readinessHandler.
+      status: "ok" as const,
       service: "investep-app-api",
       timestamp: new Date().toISOString(),
     },

@@ -80,7 +80,9 @@ export async function provisionUser(
     email,
     password,
     email_confirm: true,
-    user_metadata: { [MUST_RESET_PASSWORD_KEY]: true },
+    // El flag es un control de seguridad: vive en `app_metadata` (solo escribible
+    // server-side), NO en `user_metadata` (que el usuario puede apagar desde el browser).
+    app_metadata: { [MUST_RESET_PASSWORD_KEY]: true },
   });
 
   let userId: string;
@@ -112,7 +114,8 @@ export async function provisionUser(
     const { error: updateError } = await deps.admin.auth.admin.updateUserById(existing.id, {
       password,
       email_confirm: true,
-      user_metadata: { [MUST_RESET_PASSWORD_KEY]: true },
+      // Mismo control de seguridad que en el path de creación: el flag va en `app_metadata`.
+      app_metadata: { [MUST_RESET_PASSWORD_KEY]: true },
     });
 
     if (updateError) {

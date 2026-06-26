@@ -94,6 +94,11 @@ create-user EMAIL PASSWORD="":
 token EMAIL="" PASSWORD="":
     bun run scripts/get-token.ts {{EMAIL}} {{PASSWORD}}
 
+# One-shot: migra must_reset_password de user_metadata → app_metadata (control de seguridad).
+# Correr ANTES de desplegar el código que lee app_metadata. ENV opcional (staging/production).
+migrate-must-reset ENV="":
+    bun run scripts/migrate-must-reset-flag.ts {{ENV}}
+
 # Correr los hooks de pre-commit sobre todo el repo
 precommit:
     pre-commit run --all-files

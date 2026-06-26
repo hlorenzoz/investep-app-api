@@ -21,11 +21,21 @@ The `service-role` key MUST NOT be used for `signInWithPassword` — that flow r
 
 ### The `must_reset_password` Flag
 
-Every provisioned user gets `user_metadata.must_reset_password: true` set at creation (and reset). This flag signals to the frontend or any middleware that the user must change their credentials after the first login. The flag lifecycle:
+Every provisioned user gets `app_metadata.must_reset_password: true` set at creation (and reset). It is a **security control**, so it lives in `app_metadata` — only writable server-side with the `service_role` key — NOT in `user_metadata`, which the user can write from the browser via `auth.updateUser({ data })`. Keeping it in `user_metadata` would let any user turn the control off without changing their password. The flag lifecycle:
 
-1. **Set**: by `provisionUser` on `createUser` and `updateUserById`.
-2. **Cleared**: by the frontend after the user completes the password-change flow (via `auth.updateUser`).
-3. **Enforcement**: up to the frontend/middleware — the API does not block requests based on this flag, it only sets it.
+1. **Set**: by `provisionUser` on `createUser` and `updateUserById` (in `app_metadata`).
+2. **Read**: by the middleware `verifySupabaseToken` (`src/middleware/auth.ts`), which projects it to `AuthUser.mustResetPassword` and exposes it via `GET /auth/me`.
+3. **Cleared**: ONLY by `POST /auth/change-password` (server-side, with the admin client). The frontend must NOT clear it via `auth.updateUser` — that path no longer has any effect, since the flag is not in `user_metadata`.
+4. **Enforcement**: up to the frontend — the API does not block requests based on this flag, it only sets/reads/clears it.
+
+### `POST /auth/change-password`
+
+The only legitimate way to change the password and clear the flag. Protected by `requireAuth`.
+
+- **Request**: `{ "newPassword": string }` (min 8 chars). `userId` comes from the token, never the body.
+- Runs `admin.auth.admin.updateUserById(userId, { password, app_metadata: { must_reset_password: false } })` in one operation, then `admin.auth.admin.signOut(accessToken, 'global')` (best-effort) to revoke all sessions — the client must re-login with the new password.
+- **Response 200**: `{ "user": { "id", "email", "mustResetPassword": false } }` (same shape as `/auth/me`).
+- **Errors** (`{ error: { code, message } }`): `400` weak password (local policy) or GoTrue rejection (e.g. same-as-old); `401` missing/invalid token; `422` malformed body; `503` Supabase outage.
 
 ---
 
@@ -39,14 +49,14 @@ Operator CLI invocation
   ▼
 scripts/provision-user.ts
   ├─ loadDevVars(envName)            → reads .dev.vars*
-  ├─ createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+  ├─ makeAdminFromVars(vars)         → admin client (service-role), shared helper in scripts/_env.ts
   ├─ sendEmail bound to RESEND config
   └─ provisionUser(deps, { email, password? })
        ├─ generatePassword()             → src/features/auth/password.ts (if no password supplied)
-       ├─ admin.auth.admin.createUser({email, password, email_confirm: true, user_metadata: {must_reset_password: true}})
+       ├─ admin.auth.admin.createUser({email, password, email_confirm: true, app_metadata: {must_reset_password: true}})
        │    └─ on "already registered":
        │         ├─ findUserByEmail(admin, email)  [paginate listUsers, client-side match]
-       │         └─ admin.auth.admin.updateUserById(id, {password, user_metadata: {must_reset_password: true}})
+       │         └─ admin.auth.admin.updateUserById(id, {password, app_metadata: {must_reset_password: true}})
        ├─ credentialEmail({email, password}) → src/features/auth/templates.ts
        └─ sendEmail({to, subject, html, text})  → Resend API
   │
@@ -62,7 +72,7 @@ Implementation strategy (ADR-1):
 1. **Optimistic path**: attempt `admin.auth.admin.createUser` first. Fast for new users, no extra API call.
 2. **Detection**: if Supabase returns an error whose `.message` includes `"already registered"`, trigger the reset path.
 3. **Locate**: call `findUserByEmail` — paginates `listUsers` in pages of 50, matches client-side by email address.
-4. **Reset**: call `admin.auth.admin.updateUserById(id, { password, user_metadata: { must_reset_password: true } })`.
+4. **Reset**: call `admin.auth.admin.updateUserById(id, { password, app_metadata: { must_reset_password: true } })`.
 
 **Error detection is tied to Supabase JS SDK v2.108** (see §6, Gotchas). If the error string changes, the detection logic in `user-provisioning.ts` must be updated.
 
@@ -108,6 +118,18 @@ just token user@example.com MyP@ss          # explicit credentials
 
 The JWT is printed to stdout only. It is never logged via `console.error` or `console.warn`. Use output capture (`$(just token)`) for piping into other tools.
 
+### `just migrate-must-reset ENV=""`
+
+One-shot migration that moves `must_reset_password` from `user_metadata` → `app_metadata` for users provisioned before the flag was hardened. Copies the original value and deletes the `user_metadata` key. Idempotent: gated on `app_metadata` presence, so a re-run skips already-migrated users (even if GoTrue leaves a `null` residue in `user_metadata`).
+
+```sh
+just migrate-must-reset            # local (.dev.vars)
+just migrate-must-reset staging    # .dev.vars.staging
+# Prints: { "scanned", "migrated", "skipped", "failed" }. Exits 1 if any user failed.
+```
+
+> ⚠️ **Run this BEFORE deploying the hardened code.** The middleware reads the flag SOLELY from `app_metadata`; deploying before the migration (or with `failed > 0`) leaves pre-migration users with `mustResetPassword: false` — a fail-open window for that control. Sequence: migrate → verify counters → deploy.
+
 ### Environment Selection via `--env`
 
 All scripts accept `--env <name>` to select an alternate env file:
@@ -133,7 +155,7 @@ The provisioning system delivers a high-entropy temporary password via Resend tr
 **What the system does**:
 - Generates a 24-character password using Web Crypto (`crypto.getRandomValues`), drawn from an unambiguous charset (no O, 0, I, l, 1).
 - Sets `email_confirm: true` to skip the verification email step.
-- Sets `user_metadata.must_reset_password: true` to flag mandatory rotation.
+- Sets `app_metadata.must_reset_password: true` to flag mandatory rotation (server-side only; the user cannot clear it).
 - Sends the credential email in Spanish with a bold security warning.
 
 **Threat model and mitigations**:

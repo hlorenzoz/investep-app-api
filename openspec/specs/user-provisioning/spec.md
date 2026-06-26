@@ -37,14 +37,14 @@ The system MUST generate cryptographically strong passwords using Web Crypto (`c
 
 ### Requirement: User Provisioning — Create New User
 
-The system MUST create a new Supabase Auth user with `email_confirm: true` and `user_metadata.must_reset_password: true`. If no password is provided by the caller the system MUST generate one. The result MUST include `created: true`.
+The system MUST create a new Supabase Auth user with `email_confirm: true` and `app_metadata.must_reset_password: true`. If no password is provided by the caller the system MUST generate one. The result MUST include `created: true`.
 
 #### Scenario: Provision new user with generated password
 
 - GIVEN a valid email that does not exist in Supabase Auth
 - AND no password is supplied by the caller
 - WHEN `provisionUser` is called
-- THEN Supabase `admin.createUser` is called with `email_confirm: true` and `user_metadata.must_reset_password: true`
+- THEN Supabase `admin.createUser` is called with `email_confirm: true` and `app_metadata.must_reset_password: true`
 - AND a credential email is sent with the generated password
 - AND the result contains `{ created: true, userId, emailId }`
 
@@ -75,7 +75,7 @@ The system MUST handle the case where the email already exists in Supabase Auth.
 - WHEN `provisionUser` is called
 - THEN `admin.createUser` returns an "already registered" error
 - AND `listUsers` is called (paginating until the user is found)
-- AND `admin.updateUserById` is called with the new password and `user_metadata.must_reset_password: true`
+- AND `admin.updateUserById` is called with the new password and `app_metadata.must_reset_password: true`
 - AND a credential email is sent
 - AND the result contains `{ created: false, userId, emailId }`
 

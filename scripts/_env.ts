@@ -9,6 +9,9 @@
  * se leen desde acá, nunca desde `src/types/env.ts` (AGENTS.md §5).
  */
 import { existsSync, readFileSync } from "node:fs";
+import { createClient } from "@supabase/supabase-js";
+import type { AppSupabaseClient } from "../src/lib/supabase";
+import type { Database } from "../src/types/database.types";
 
 /**
  * Saca comillas simples o dobles que envuelvan el valor, como dotenv/wrangler.
@@ -47,4 +50,28 @@ export function loadDevVars(envName?: string): Record<string, string> {
     vars[line.slice(0, eq).trim()] = unquote(line.slice(eq + 1).trim());
   }
   return vars;
+}
+
+/**
+ * Construye un cliente Supabase admin (service-role) a partir de las vars de un
+ * archivo de entorno. Centraliza la validación + config compartida por los scripts CLI
+ * (provision-user, migrate-must-reset-flag).
+ *
+ * LANZA `Error` si faltan los secretos (en vez de `process.exit`): así es testeable y no
+ * acopla el helper a un único modo de salida. El caller (cada script) decide cómo abortar.
+ *
+ * Scripts de uso (NO Worker runtime): `persistSession`/`autoRefreshToken` en false porque
+ * son procesos de una sola pasada que no mantienen sesión.
+ */
+export function makeAdminFromVars(vars: Record<string, string>): AppSupabaseClient {
+  const supabaseUrl = vars.SUPABASE_URL ?? "";
+  const serviceRoleKey = vars.SUPABASE_SERVICE_ROLE_KEY ?? "";
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en el archivo de entorno.");
+  }
+
+  return createClient<Database>(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }

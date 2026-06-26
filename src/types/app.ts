@@ -8,7 +8,7 @@ import type { Env } from "./env";
 export interface AuthUser {
   id: string;
   email: string;
-  /** `user_metadata.must_reset_password`: el frontend debe forzar el cambio. */
+  /** `app_metadata.must_reset_password` (control de seguridad server-side): el frontend debe forzar el cambio. */
   mustResetPassword: boolean;
 }
 
@@ -23,12 +23,15 @@ export interface AppBindings {
 }
 
 /**
- * Bindings para rutas envueltas por `requireAuth`. Agrega `user` al contexto;
- * el middleware garantiza que esté presente antes de ejecutar el handler.
+ * Bindings para rutas envueltas por `requireAuth`. Agrega `user` y el `accessToken`
+ * crudo al contexto; el middleware garantiza que ambos estén presentes antes de
+ * ejecutar el handler. `accessToken` lo necesitan las rutas que operan sobre la
+ * sesión (p. ej. revocar sesiones tras cambiar la contraseña) sin re-parsear el header.
  */
 export interface AuthedBindings {
   Bindings: Env;
   Variables: {
     user: AuthUser;
+    accessToken: string;
   };
 }

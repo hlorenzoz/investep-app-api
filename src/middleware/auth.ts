@@ -59,11 +59,14 @@ export async function verifySupabaseToken(env: Env, token: string): Promise<Auth
     return null;
   }
 
-  const metadata = (data.user.user_metadata ?? {}) as Record<string, unknown>;
+  // El flag vive en `app_metadata` (solo escribible server-side con la service-role key),
+  // NO en `user_metadata` (que el propio usuario puede escribir desde el browser). Es un
+  // control de seguridad: leerlo de user_metadata permitiría apagarlo sin cambiar la clave.
+  const appMetadata = (data.user.app_metadata ?? {}) as Record<string, unknown>;
   return {
     id: data.user.id,
     email: data.user.email,
-    mustResetPassword: metadata[MUST_RESET_PASSWORD_KEY] === true,
+    mustResetPassword: appMetadata[MUST_RESET_PASSWORD_KEY] === true,
   };
 }
 
@@ -90,6 +93,9 @@ export function createAuthMiddleware(
     }
 
     c.set("user", user);
+    // Guardamos el token crudo para las rutas que operan sobre la sesión (p. ej.
+    // revocar sesiones tras un cambio de contraseña) sin re-parsear el header.
+    c.set("accessToken", token);
     await next();
   };
 }

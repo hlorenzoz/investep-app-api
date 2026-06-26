@@ -29,3 +29,26 @@ export function throwPostgrestError(cause: unknown, userMessage: string, status?
   }
   throw new AppError("INTERNAL_ERROR", userMessage, 500, undefined, { cause });
 }
+
+/**
+ * Traduce un error de la Admin API de Supabase Auth (GoTrue) al AppError correcto.
+ * Extiende `throwPostgrestError` con el caso de input del usuario:
+ * - 400 / 422 → 400 VALIDATION_ERROR con `validationMessage` (la propia política de GoTrue
+ *   rechazó la contraseña: débil / igual a la anterior / leaked-password protection).
+ * - transitorio (0/undefined/429/5xx) → 503 SERVICE_UNAVAILABLE.
+ * - resto (4xx genuino no-input, p. ej. 404) → 500 INTERNAL_ERROR con `userMessage`.
+ *
+ * El `cause` viaja en options, nunca al cliente (§5). Helper compartido para que cada
+ * endpoint de auth que llame a la Admin API mapee igual (no reinvente la política).
+ */
+export function throwSupabaseAuthError(
+  cause: unknown,
+  userMessage: string,
+  validationMessage: string,
+  status?: number,
+): never {
+  if (status === 400 || status === 422) {
+    throw new AppError("VALIDATION_ERROR", validationMessage, 400, undefined, { cause });
+  }
+  throwPostgrestError(cause, userMessage, status);
+}

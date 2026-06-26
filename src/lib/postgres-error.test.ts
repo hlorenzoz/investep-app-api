@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import { AppError } from "./errors";
-import { isTransientPostgrestError, throwPostgrestError } from "./postgres-error";
+import {
+  isTransientPostgrestError,
+  throwPostgrestError,
+  throwSupabaseAuthError,
+} from "./postgres-error";
 
 describe("isTransientPostgrestError", () => {
   it("es transitorio: undefined / 0 (red caída), 429 (throttling), 5xx (Supabase caído)", () => {
@@ -56,6 +60,58 @@ describe("throwPostgrestError", () => {
     const cause = { message: "raw pg detail", hint: "secret-ish" };
     try {
       throwPostgrestError(cause, "mensaje público", 400);
+    } catch (err) {
+      expect((err as AppError).cause).toBe(cause);
+      expect((err as AppError).details).toBeUndefined();
+    }
+  });
+});
+
+describe("throwSupabaseAuthError", () => {
+  const VALIDATION_MSG = "La contraseña no es válida.";
+  const INTERNAL_MSG = "No se pudo cambiar la contraseña.";
+
+  for (const status of [400, 422]) {
+    it(`status ${status} (input rechazado por GoTrue) → 400 VALIDATION_ERROR con validationMessage`, () => {
+      try {
+        throwSupabaseAuthError({ message: "weak" }, INTERNAL_MSG, VALIDATION_MSG, status);
+        throw new Error("debería haber lanzado");
+      } catch (err) {
+        expect(err).toBeInstanceOf(AppError);
+        expect((err as AppError).code).toBe("VALIDATION_ERROR");
+        expect((err as AppError).status).toBe(400);
+        expect((err as AppError).message).toBe(VALIDATION_MSG);
+      }
+    });
+  }
+
+  for (const status of [undefined, 0, 429, 500, 503]) {
+    it(`status ${status} (transitorio) → 503 SERVICE_UNAVAILABLE`, () => {
+      try {
+        throwSupabaseAuthError({ message: "boom" }, INTERNAL_MSG, VALIDATION_MSG, status);
+        throw new Error("debería haber lanzado");
+      } catch (err) {
+        expect((err as AppError).code).toBe("SERVICE_UNAVAILABLE");
+        expect((err as AppError).status).toBe(503);
+      }
+    });
+  }
+
+  it("status 404 (genuino no-input, no-transitorio) → 500 INTERNAL_ERROR con userMessage", () => {
+    try {
+      throwSupabaseAuthError({ message: "not found" }, INTERNAL_MSG, VALIDATION_MSG, 404);
+      throw new Error("debería haber lanzado");
+    } catch (err) {
+      expect((err as AppError).code).toBe("INTERNAL_ERROR");
+      expect((err as AppError).status).toBe(500);
+      expect((err as AppError).message).toBe(INTERNAL_MSG);
+    }
+  });
+
+  it("el cause viaja en err.cause, nunca en details", () => {
+    const cause = { message: "raw", status: 422 };
+    try {
+      throwSupabaseAuthError(cause, INTERNAL_MSG, VALIDATION_MSG, 422);
     } catch (err) {
       expect((err as AppError).cause).toBe(cause);
       expect((err as AppError).details).toBeUndefined();

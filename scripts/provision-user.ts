@@ -11,12 +11,10 @@
  * Si PASSWORD se omite (o es cadena vacía), se genera automáticamente.
  * Imprime SOLO { userId, created, emailId } — NUNCA la contraseña ni el JWT.
  */
-import { createClient } from "@supabase/supabase-js";
 import { provisionUser } from "../src/features/auth";
 import { AppError } from "../src/lib/errors";
 import { sendEmail } from "../src/lib/resend";
-import type { Database } from "../src/types/database.types";
-import { loadDevVars } from "./_env";
+import { loadDevVars, makeAdminFromVars } from "./_env";
 
 // ---------------------------------------------------------------------------
 // Parseo de argumentos
@@ -54,17 +52,14 @@ if (!email) {
 // Cliente Supabase (admin)
 // ---------------------------------------------------------------------------
 
-const supabaseUrl = vars.SUPABASE_URL ?? "";
-const serviceRoleKey = vars.SUPABASE_SERVICE_ROLE_KEY ?? "";
-
-if (!supabaseUrl || !serviceRoleKey) {
-  console.error("Faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en el archivo de entorno.");
+// Validación + config compartida en `_env.ts` (mismo client que migrate-must-reset-flag).
+let admin: ReturnType<typeof makeAdminFromVars>;
+try {
+  admin = makeAdminFromVars(vars);
+} catch (err) {
+  console.error(err instanceof Error ? err.message : "Error de configuración.");
   process.exit(1);
 }
-
-const admin = createClient<Database>(supabaseUrl, serviceRoleKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
 
 // ---------------------------------------------------------------------------
 // Bound sendEmail

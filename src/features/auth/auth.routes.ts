@@ -11,6 +11,12 @@ export const AuthUserSchema = z
   })
   .openapi("AuthUser");
 
+export const ChangePasswordRequestSchema = z
+  .object({
+    newPassword: z.string().openapi({ example: "una-contraseña-nueva-segura" }),
+  })
+  .openapi("ChangePasswordRequest");
+
 export const meRoute = createRoute({
   method: "get",
   path: "/me",
@@ -30,3 +36,34 @@ export const meRoute = createRoute({
 });
 
 export type MeRoute = typeof meRoute;
+
+export const changePasswordRoute = createRoute({
+  method: "post",
+  path: "/change-password",
+  tags: ["Auth"],
+  summary: "Cambiar la contraseña del usuario autenticado",
+  description:
+    "Cambia la contraseña del usuario asociado al JWT y apaga el flag de reset obligatorio " +
+    "(`must_reset_password`), que vive en `app_metadata` y solo es escribible server-side. " +
+    "Tras el cambio se revocan todas las sesiones del usuario: hay que volver a iniciar sesión.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { "application/json": { schema: ChangePasswordRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      content: { "application/json": { schema: AuthUserSchema } },
+      description: "Contraseña cambiada; `mustResetPassword` pasa a `false`.",
+    },
+    400: jsonErrorResponse("La contraseña no cumple la política mínima o la rechaza Supabase."),
+    401: jsonErrorResponse("Falta o es inválido el token."),
+    422: jsonErrorResponse("Cuerpo inválido: falta `newPassword` o no es un string."),
+    500: jsonErrorResponse("Error inesperado de Supabase al cambiar la contraseña."),
+    503: jsonErrorResponse("Supabase no disponible; reintentá en unos segundos."),
+  },
+});
+
+export type ChangePasswordRoute = typeof changePasswordRoute;
