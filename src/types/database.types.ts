@@ -451,6 +451,7 @@ export type Database = {
           account_type: string
           created_at: string
           id: number
+          target_daily_pct: number | null
           target_monthly_pct: number
           updated_at: string
         }
@@ -458,6 +459,7 @@ export type Database = {
           account_type: string
           created_at?: string
           id?: never
+          target_daily_pct?: number | null
           target_monthly_pct: number
           updated_at?: string
         }
@@ -465,6 +467,7 @@ export type Database = {
           account_type?: string
           created_at?: string
           id?: never
+          target_daily_pct?: number | null
           target_monthly_pct?: number
           updated_at?: string
         }
