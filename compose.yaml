@@ -653,6 +653,14 @@ services:
         - action: rebuild
           path: ./bun.lock
 
+# Red del stack. Se nombra explícito (en vez del default `investep_default`) para que
+# consumidores externos —p. ej. el compose de la app Flutter— puedan unirse con
+# `external: true` usando un nombre estable. Es el nombre que dejaba el CLI de Supabase,
+# así el resto de los repos que ya lo referencian siguen funcionando sin cambios.
+networks:
+  default:
+    name: supabase_network_investep-app-api
+
 volumes:
   db-config:
   deno-cache:
