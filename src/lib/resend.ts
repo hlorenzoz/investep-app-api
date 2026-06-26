@@ -1,5 +1,6 @@
 import type { Env } from "../types/env";
 import { AppError } from "./errors";
+import { logError } from "./log";
 
 /** Endpoint REST de Resend para enviar correos. */
 const RESEND_EMAILS_ENDPOINT = "https://api.resend.com/emails";
@@ -85,7 +86,7 @@ export async function sendEmail(
     // Log mínimo (solo el status, sin payload ni credenciales) y respuesta genérica.
     // El cuerpo de Resend (motivo de validación) viaja en `cause` para diagnóstico, no al cliente.
     const reason = await res.text();
-    console.error(`Resend respondió ${res.status} al enviar un correo`);
+    logError("resend_send_failed", { status: res.status });
     throw new AppError("INTERNAL_ERROR", "No se pudo enviar el correo.", 502, undefined, {
       cause: reason,
     });

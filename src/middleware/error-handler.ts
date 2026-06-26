@@ -1,6 +1,7 @@
 import type { ErrorHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { AppError, type ErrorCode, toErrorResponse } from "../lib/errors";
+import { logError } from "../lib/log";
 import type { AppBindings } from "../types/app";
 
 function statusToCode(status: number): ErrorCode {
@@ -32,6 +33,6 @@ export const errorHandler: ErrorHandler<AppBindings> = (err, c) => {
   }
 
   // Error inesperado: log mínimo (sin payloads ni credenciales) y respuesta genérica.
-  console.error(`Unhandled error: ${err instanceof Error ? err.name : "unknown"}`);
+  logError("unhandled_error", { name: err instanceof Error ? err.name : "unknown" });
   return c.json(toErrorResponse("INTERNAL_ERROR", "Ocurrió un error inesperado."), 500);
 };

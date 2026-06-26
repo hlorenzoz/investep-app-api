@@ -10,6 +10,7 @@
  * que `provisionUser`.
  */
 import { AppError } from "../../lib/errors";
+import { logError } from "../../lib/log";
 import { throwSupabaseAuthError } from "../../lib/postgres-error";
 import type { AppSupabaseClient } from "../../lib/supabase";
 import { MUST_RESET_PASSWORD_KEY } from "./metadata";
@@ -91,9 +92,7 @@ export async function changePassword(
     // vivos. Logueamos userId + status para correlación (distinguir un 401 esperado de un
     // outage real); nunca el token ni el mensaje crudo (§5).
     const status = (signOutErr as { status?: number }).status ?? "desconocido";
-    console.error(
-      `change-password: revocación de sesiones falló (best-effort) userId=${input.userId} status=${status}`,
-    );
+    logError("password_session_revocation_failed", { userId: input.userId, status });
   }
 
   return {
