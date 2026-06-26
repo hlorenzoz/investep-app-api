@@ -1,5 +1,30 @@
 import { AppError } from "./errors";
 
+/** SQLSTATE de Postgres para violación de restricción UNIQUE. */
+const PG_UNIQUE_VIOLATION = "23505";
+
+/** SQLSTATE de Postgres para violación de FOREIGN KEY (fila referenciada). */
+const PG_FOREIGN_KEY_VIOLATION = "23503";
+
+/**
+ * ¿El error del data-layer es una violación de UNIQUE (duplicado)? PostgREST
+ * propaga el SQLSTATE de Postgres en `error.code`. Se usa para mapear un insert
+ * duplicado (slug de broker, par único de plan) a `CONFLICT` (409) en vez del
+ * 500 genérico. Helper compartido para que cada catálogo mapee igual (DRY).
+ */
+export function isUniqueViolation(cause: unknown): boolean {
+  return (cause as { code?: string } | null)?.code === PG_UNIQUE_VIOLATION;
+}
+
+/**
+ * ¿El error es una violación de FOREIGN KEY? Se usa al borrar una fila de catálogo
+ * que todavía está referenciada (p. ej. un broker con asignaciones de usuarios):
+ * se mapea a `CONFLICT` (409) en vez del 500 genérico.
+ */
+export function isForeignKeyViolation(cause: unknown): boolean {
+  return (cause as { code?: string } | null)?.code === PG_FOREIGN_KEY_VIOLATION;
+}
+
 /**
  * ¿El fallo del data-layer es transitorio (outage) y conviene reintentar?
  * - status 0/undefined: el fetch falló (red caída).

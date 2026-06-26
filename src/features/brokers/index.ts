@@ -1,14 +1,12 @@
-import { OpenAPIHono } from "@hono/zod-openapi";
-import type { AppBindings } from "../../types/app";
-
 /**
- * Dominio: BROKERS — conexión con brókers de terceros vía un agregador
- * (SnapTrade / Plaid — elección PENDIENTE, AGENTS.md §10).
+ * Dominio: BROKERS — catálogo de brokers soportados.
  *
  * Reglas no negociables (AGENTS.md §5/§6):
- *   - Acceso SOLO LECTURA: nada de colocar/modificar/cancelar órdenes ni mover fondos.
- *   - Tokens OAuth del agregador SIEMPRE cifrados en reposo; nunca en logs ni respuestas.
+ *   - Catálogo de SOLO LECTURA para el cliente; las mutaciones son admin-only.
+ *   - La conexión real con brókers de terceros (órdenes, fondos) NO vive acá: este
+ *     dominio solo administra el catálogo que el setup consume.
  *
- * Stub inicial. Seguí el patrón de `features/health/` para agregar endpoints.
+ * Barrera del feature: re-exporta el router CLIENTE (`/brokers`, lectura) y el
+ * router ADMIN (`/admin/brokers`, CRUD protegido por `requireAdmin`).
  */
-export const brokersRouter = new OpenAPIHono<AppBindings>();
+export { adminBrokersRouter, brokersRouter } from "./brokers.router";

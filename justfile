@@ -94,6 +94,12 @@ create-user EMAIL PASSWORD="":
 token EMAIL="" PASSWORD="":
     bun run scripts/get-token.ts {{EMAIL}} {{PASSWORD}}
 
+# Marca (o revoca con --revoke) a un usuario como admin: setea is_admin en app_metadata.
+# Habilita el CRUD de catálogos (brokers/plans) tras `requireAdmin`. ENV opcional via --env.
+# Uso: `just set-admin alguien@dominio.com` | `... --revoke` | `just set-admin` (usa BOOTSTRAP_ADMIN_EMAIL).
+set-admin *ARGS:
+    bun run scripts/set-admin.ts {{ARGS}}
+
 # One-shot: migra must_reset_password de user_metadata → app_metadata (control de seguridad).
 # Correr ANTES de desplegar el código que lee app_metadata. ENV opcional (staging/production).
 migrate-must-reset ENV="":

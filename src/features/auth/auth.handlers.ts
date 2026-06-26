@@ -9,8 +9,10 @@ import { changePassword } from "./change-password";
  * así que el handler solo lo proyecta a la respuesta.
  */
 export const meHandler: RouteHandler<MeRoute, AuthedBindings> = (c) => {
-  const user = c.get("user");
-  return c.json({ user }, 200);
+  const { id, email, mustResetPassword } = c.get("user");
+  // Proyección explícita: `isAdmin` es un control interno (lo consume `requireAdmin`),
+  // NO parte del contrato público de `/auth/me`. No se filtra al cliente (§5).
+  return c.json({ user: { id, email, mustResetPassword } }, 200);
 };
 
 /**

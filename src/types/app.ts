@@ -10,6 +10,8 @@ export interface AuthUser {
   email: string;
   /** `app_metadata.must_reset_password` (control de seguridad server-side): el frontend debe forzar el cambio. */
   mustResetPassword: boolean;
+  /** `app_metadata.is_admin` (control de seguridad server-side): habilita el CRUD de catálogos vía `requireAdmin`. */
+  isAdmin: boolean;
 }
 
 /**

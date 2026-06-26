@@ -1,5 +1,6 @@
 /**
  * Dominio: PLANS — catálogo de planes de inversión (target mensual por tipo de cuenta).
- * Barrera del feature: re-exporta el router HTTP (`GET /plans`).
+ * Barrera del feature: re-exporta el router CLIENTE (`/plans`, lectura) y el router
+ * ADMIN (`/admin/plans`, CRUD protegido por `requireAdmin`).
  */
-export { plansRouter } from "./plans.router";
+export { adminPlansRouter, plansRouter } from "./plans.router";

@@ -14,7 +14,12 @@ const ENV: Env = {
   DOCUMENTS: {} as R2Bucket,
 };
 
-const FAKE_USER: AuthUser = { id: "uid-1", email: "user@example.com", mustResetPassword: false };
+const FAKE_USER: AuthUser = {
+  id: "uid-1",
+  email: "user@example.com",
+  mustResetPassword: false,
+  isAdmin: false,
+};
 
 /** App Hono mínima para ejercitar el middleware con un verificador inyectado. */
 function makeApp(verify: TokenVerifier) {

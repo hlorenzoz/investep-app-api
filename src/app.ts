@@ -5,10 +5,10 @@ import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 
 import { authRouter } from "./features/auth";
-import { brokersRouter } from "./features/brokers";
+import { adminBrokersRouter, brokersRouter } from "./features/brokers";
 import { capitalRouter } from "./features/capital";
 import { healthRouter } from "./features/health/health.router";
-import { plansRouter } from "./features/plans";
+import { adminPlansRouter, plansRouter } from "./features/plans";
 import { portfolioRouter } from "./features/portfolio";
 import { openApiConfig, validationHook } from "./lib/openapi";
 import { docsGuard } from "./middleware/docs-guard";
@@ -41,6 +41,10 @@ export function createApp() {
   app.route("/capital", capitalRouter);
   app.route("/portfolio", portfolioRouter);
   app.route("/brokers", brokersRouter);
+
+  // --- Admin: CRUD de catálogos, protegido por `requireAdmin` (AGENTS.md §5/§6) ---
+  app.route("/admin/brokers", adminBrokersRouter);
+  app.route("/admin/plans", adminPlansRouter);
 
   // Esquema de seguridad para el spec OpenAPI (Bearer JWT de Supabase Auth).
   app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {

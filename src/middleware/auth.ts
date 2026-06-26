@@ -1,6 +1,6 @@
 import { isAuthApiError } from "@supabase/supabase-js";
 import type { MiddlewareHandler } from "hono";
-import { MUST_RESET_PASSWORD_KEY } from "../features/auth/metadata";
+import { IS_ADMIN_KEY, MUST_RESET_PASSWORD_KEY } from "../features/auth/metadata";
 import { AppError } from "../lib/errors";
 import { createSupabaseClient } from "../lib/supabase";
 import type { AuthedBindings, AuthUser } from "../types/app";
@@ -67,6 +67,7 @@ export async function verifySupabaseToken(env: Env, token: string): Promise<Auth
     id: data.user.id,
     email: data.user.email,
     mustResetPassword: appMetadata[MUST_RESET_PASSWORD_KEY] === true,
+    isAdmin: appMetadata[IS_ADMIN_KEY] === true,
   };
 }
 
