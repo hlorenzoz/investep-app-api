@@ -42,3 +42,5 @@ coverage/
 # Agentes de IA
 .agents/skills/**
 .claude/skills/**
+
+tmp/
