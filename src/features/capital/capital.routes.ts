@@ -24,6 +24,7 @@ export const AllocationSchema = z
     targetMonthlyPct: z.number().openapi({ example: 25 }),
     initialDeposit: z.number().openapi({ example: 4000 }),
     currency: CurrencySchema,
+    createdAt: z.string().datetime().openapi({ example: "2026-06-25T05:00:00.000Z" }),
   })
   .openapi("Allocation");
 

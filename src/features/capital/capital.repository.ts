@@ -17,6 +17,7 @@ export interface AllocationRow {
   targetMonthlyPct: number;
   initialDeposit: number;
   currency: string;
+  createdAt: string;
 }
 
 export interface PlanRef {
@@ -66,7 +67,7 @@ export interface CapitalRepository {
 // ---------------------------------------------------------------------------
 
 const ALLOCATION_SELECT =
-  "id, broker_id, account_type, investment_plan_id, initial_deposit, currency, brokers(slug), investment_plans(target_monthly_pct)";
+  "id, broker_id, account_type, investment_plan_id, initial_deposit, currency, created_at, brokers(slug), investment_plans(target_monthly_pct)";
 
 interface AllocationQueryRow {
   id: string;
@@ -75,6 +76,7 @@ interface AllocationQueryRow {
   investment_plan_id: number;
   initial_deposit: number | string;
   currency: string;
+  created_at: string;
   brokers: { slug: string } | null;
   investment_plans: { target_monthly_pct: number | string } | null;
 }
@@ -89,6 +91,7 @@ function mapAllocation(row: AllocationQueryRow): AllocationRow {
     targetMonthlyPct: Number(row.investment_plans?.target_monthly_pct ?? 0),
     initialDeposit: Number(row.initial_deposit),
     currency: row.currency,
+    createdAt: row.created_at,
   };
 }
 
