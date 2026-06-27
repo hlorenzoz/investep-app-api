@@ -15,6 +15,7 @@ export interface PlanView {
   id: number;
   accountType: AccountType;
   targetMonthlyPct: number;
+  targetDailyPct: number | null;
   label: string | null;
 }
 
@@ -29,6 +30,7 @@ interface PlanQueryRow {
   account_type: AccountType;
   // PostgREST devuelve numeric como string; coercemos al mapear.
   target_monthly_pct: number | string;
+  target_daily_pct: number | string | null;
   investment_plan_translations: { label: string; locale: string }[] | null;
 }
 
@@ -44,7 +46,7 @@ export async function listPlans(
 
   let query = admin
     .from("investment_plans")
-    .select("id, account_type, target_monthly_pct, investment_plan_translations(label, locale)")
+    .select("id, account_type, target_monthly_pct, target_daily_pct, investment_plan_translations(label, locale)")
     .order("account_type")
     .order("target_monthly_pct");
 
@@ -59,6 +61,7 @@ export async function listPlans(
     id: row.id,
     accountType: row.account_type,
     targetMonthlyPct: Number(row.target_monthly_pct),
+    targetDailyPct: row.target_daily_pct != null ? Number(row.target_daily_pct) : null,
     label: row.investment_plan_translations?.find((t) => t.locale === locale)?.label ?? null,
   }));
 
