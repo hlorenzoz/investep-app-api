@@ -56,6 +56,25 @@ export function throwPostgrestError(cause: unknown, userMessage: string, status?
 }
 
 /**
+ * FK violation (23503) al insertar/upsertar una fila hija con un id o código que el admin pasó y
+ * que no existe (un `locale` ausente en `locales`, una `feature` ausente en `investep_features`,
+ * etc.): es input inválido → `VALIDATION_ERROR` (422), no un 500 genérico. El resto cae al mapeo
+ * estándar de `throwPostgrestError`. Helper compartido para que cada catálogo con hijos por FK
+ * mapee igual (DRY) — no reinvente la política por feature.
+ */
+export function throwForeignKeyAs422(
+  cause: unknown,
+  invalidRefMessage: string,
+  fallbackMessage: string,
+  status?: number,
+): never {
+  if (isForeignKeyViolation(cause)) {
+    throw new AppError("VALIDATION_ERROR", invalidRefMessage, 422);
+  }
+  throwPostgrestError(cause, fallbackMessage, status);
+}
+
+/**
  * Traduce un error de la Admin API de Supabase Auth (GoTrue) al AppError correcto.
  * Extiende `throwPostgrestError` con el caso de input del usuario:
  * - 400 / 422 → 400 VALIDATION_ERROR con `validationMessage` (la propia política de GoTrue

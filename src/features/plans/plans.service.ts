@@ -3,6 +3,7 @@ import { logError } from "../../lib/log";
 import {
   isForeignKeyViolation,
   isUniqueViolation,
+  throwForeignKeyAs422,
   throwPostgrestError,
 } from "../../lib/postgres-error";
 import type { AppSupabaseClient } from "../../lib/supabase";
@@ -46,7 +47,9 @@ export async function listPlans(
 
   let query = admin
     .from("investment_plans")
-    .select("id, account_type, target_monthly_pct, target_daily_pct, investment_plan_translations(label, locale)")
+    .select(
+      "id, account_type, target_monthly_pct, target_daily_pct, investment_plan_translations(label, locale)",
+    )
     .order("account_type")
     .order("target_monthly_pct");
 
@@ -149,21 +152,9 @@ export async function getPlanDetail(
   return row ? toPlanAdminView(row) : null;
 }
 
-/**
- * Mapea un error de la operación sobre `investment_plan_translations` al AppError correcto.
- * Una FK violation (23503) acá significa un `locale` que no existe en la tabla `locales`: es
- * input inválido del admin → 422 (NO un 500 genérico). El resto cae al mapeo estándar.
- */
-function throwTranslationError(cause: unknown, status?: number): never {
-  if (isForeignKeyViolation(cause)) {
-    throw new AppError(
-      "VALIDATION_ERROR",
-      "Una de las traducciones usa un locale desconocido.",
-      422,
-    );
-  }
-  throwPostgrestError(cause, "No se pudieron guardar las traducciones del plan.", status);
-}
+// Mensajes del mapeo de error de traducciones (FK 23503 = locale desconocido → 422, vía helper).
+const TRANSLATION_LOCALE_INVALID = "Una de las traducciones usa un locale desconocido.";
+const TRANSLATION_SAVE_FAILED = "No se pudieron guardar las traducciones del plan.";
 
 /**
  * Crea un plan y sus traducciones. El par (accountType, targetMonthlyPct) duplicado →
@@ -209,7 +200,7 @@ export async function createPlan(admin: AppSupabaseClient, input: NewPlan): Prom
         // es justo lo que querés poder rastrear/alertar. Solo el id, nunca datos sensibles (§5).
         logError("plan_rollback_failed", { planId: data.id });
       }
-      throwTranslationError(tErr, tStatus);
+      throwForeignKeyAs422(tErr, TRANSLATION_LOCALE_INVALID, TRANSLATION_SAVE_FAILED, tStatus);
     }
   }
 
@@ -251,7 +242,8 @@ export async function updatePlan(
       patch.translations.map((t) => ({ investment_plan_id: id, locale: t.locale, label: t.label })),
       { onConflict: "investment_plan_id,locale" },
     );
-    if (error) throwTranslationError(error, status);
+    if (error)
+      throwForeignKeyAs422(error, TRANSLATION_LOCALE_INVALID, TRANSLATION_SAVE_FAILED, status);
   }
 
   // Estado final: incluye el targetDailyPct ya recalculado por el trigger.
