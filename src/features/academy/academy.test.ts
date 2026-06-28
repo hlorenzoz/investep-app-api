@@ -29,6 +29,14 @@ const userResponse = (isAdmin: boolean) =>
 /** Rutea por el PATH de la tabla destino (no por substring de la URL completa). */
 const pathEndsWith = (url: string, suffix: string) => new URL(url).pathname.endsWith(suffix);
 
+/** Extrae los valores de un filtro PostgREST `.in()`: `col=in.(a,b)` → `["a","b"]`. */
+const parseInFilter = (url: string, column: string): string[] =>
+  (new URL(url).searchParams.get(column) ?? "")
+    .replace(/^in\./, "")
+    .replace(/[()"]/g, "")
+    .split(",")
+    .filter(Boolean);
+
 // --- Fixtures ---
 
 const CLIENT_ROWS = [
@@ -357,9 +365,7 @@ describe("Academy plans (admin)", () => {
         return json(null, 201);
       }
       if (pathEndsWith(url, "/investep_plan_features") && method === "DELETE") {
-        // El filtro .in(...) viaja en la query string: investep_feature_id=in.(1,2)
-        const param = new URL(url).searchParams.get("investep_feature_id") ?? "";
-        featureDeleteRemoved = param.match(/\d+/g)?.map(Number) ?? [];
+        featureDeleteRemoved = parseInFilter(url, "investep_feature_id").map(Number);
         return json(null, 200);
       }
       return json(null, 200); // PATCH plan, upsert traducciones
@@ -436,13 +442,7 @@ describe("Academy plans (admin)", () => {
       if (pathEndsWith(url, "/investep_plans") && method === "GET")
         return json([existingTwoLocales], 200);
       if (pathEndsWith(url, "/investep_plan_translations") && method === "DELETE") {
-        // locale=in.(es) o in.("es") → extraemos los códigos dentro de los paréntesis.
-        const param = new URL(url).searchParams.get("locale") ?? "";
-        removedLocales = param
-          .replace(/^in\./, "")
-          .replace(/[()"]/g, "")
-          .split(",")
-          .filter(Boolean);
+        removedLocales = parseInFilter(url, "locale");
         return json(null, 200);
       }
       return json(null, 200); // upsert traducciones (POST), PATCH plan
@@ -734,6 +734,8 @@ describe("Academy plans (admin): authz por endpoint y casos límite (test:review
       ENV,
     );
     expect(res.status).toBe(403);
+    // Fijamos el code: prueba que el 403 viene de requireAdmin (FORBIDDEN), no de otra capa.
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("FORBIDDEN");
   });
 
   it("authz: 403 al ELIMINAR siendo no-admin", async () => {
@@ -744,6 +746,7 @@ describe("Academy plans (admin): authz por endpoint y casos límite (test:review
       ENV,
     );
     expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("FORBIDDEN");
   });
 
   it("límite (dinero): priceOffer null se mapea a null, NO a 0", async () => {
@@ -774,8 +777,7 @@ describe("Academy plans (admin): authz por endpoint y casos límite (test:review
         return json(null, 201);
       }
       if (pathEndsWith(url, "/investep_plan_features") && method === "DELETE") {
-        const p = new URL(url).searchParams.get("investep_feature_id") ?? "";
-        removed = p.match(/\d+/g)?.map(Number) ?? [];
+        removed = parseInFilter(url, "investep_feature_id").map(Number);
         return json(null, 200);
       }
       return json(null, 200);
