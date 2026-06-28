@@ -3,6 +3,7 @@ import { logError } from "../../lib/log";
 import {
   isForeignKeyViolation,
   isUniqueViolation,
+  throwForeignKeyAs422,
   throwPostgrestError,
 } from "../../lib/postgres-error";
 import type { AppSupabaseClient } from "../../lib/supabase";
@@ -189,31 +190,11 @@ function toAdminView(row: AcademyPlanAdminRow): AcademyPlanAdminView {
   };
 }
 
-/**
- * Una FK violation (23503) al guardar traducciones = `locale` inexistente en `locales`: input
- * inválido del admin → 422 (no un 500). El resto cae al mapeo estándar.
- */
-function throwTranslationError(cause: unknown, status?: number): never {
-  if (isForeignKeyViolation(cause)) {
-    throw new AppError(
-      "VALIDATION_ERROR",
-      "Una de las traducciones usa un locale desconocido.",
-      422,
-    );
-  }
-  throwPostgrestError(cause, "No se pudieron guardar las traducciones del paquete.", status);
-}
-
-/**
- * Una FK violation (23503) al asociar features = un `featureId` que no existe en `investep_features`:
- * input inválido del admin → 422. El resto cae al mapeo estándar.
- */
-function throwFeatureError(cause: unknown, status?: number): never {
-  if (isForeignKeyViolation(cause)) {
-    throw new AppError("VALIDATION_ERROR", "Una de las features no existe.", 422);
-  }
-  throwPostgrestError(cause, "No se pudieron asociar las features del paquete.", status);
-}
+// Mensajes de error del dominio (reutilizados en create/update con throwForeignKeyAs422).
+const TRANSLATION_LOCALE_INVALID = "Una de las traducciones usa un locale desconocido.";
+const TRANSLATION_SAVE_FAILED = "No se pudieron guardar las traducciones del paquete.";
+const FEATURE_INVALID = "Una de las features no existe.";
+const FEATURE_SAVE_FAILED = "No se pudieron asociar las features del paquete.";
 
 /** Lista TODOS los paquetes (activos e inactivos) con traducciones e ids de features. */
 export async function listAcademyPlansAdmin(
@@ -293,14 +274,8 @@ export async function createAcademyPlan(
     }
   }
 
-  const normalizedTranslations: AcademyPlanTranslation[] = input.translations.map((t) => ({
-    locale: t.locale,
-    name: t.name,
-    subtitle: t.subtitle,
-  }));
-
   const { error: tErr, status: tStatus } = await admin.from("investep_plan_translations").insert(
-    normalizedTranslations.map((t) => ({
+    input.translations.map((t) => ({
       investep_plan_id: planId,
       locale: t.locale,
       name: t.name,
@@ -309,18 +284,18 @@ export async function createAcademyPlan(
   );
   if (tErr) {
     await rollback();
-    throwTranslationError(tErr, tStatus);
+    throwForeignKeyAs422(tErr, TRANSLATION_LOCALE_INVALID, TRANSLATION_SAVE_FAILED, tStatus);
   }
 
-  if (input.featureIds.length > 0) {
+  // Dedup defensivo: un featureId repetido violaría la PK (plan_id, feature_id) → 23505 → 500.
+  const featureIds = Array.from(new Set(input.featureIds));
+  if (featureIds.length > 0) {
     const { error: fErr, status: fStatus } = await admin
       .from("investep_plan_features")
-      .insert(
-        input.featureIds.map((fid) => ({ investep_plan_id: planId, investep_feature_id: fid })),
-      );
+      .insert(featureIds.map((fid) => ({ investep_plan_id: planId, investep_feature_id: fid })));
     if (fErr) {
       await rollback();
-      throwFeatureError(fErr, fStatus);
+      throwForeignKeyAs422(fErr, FEATURE_INVALID, FEATURE_SAVE_FAILED, fStatus);
     }
   }
 
@@ -332,22 +307,30 @@ export async function createAcademyPlan(
     currency: data.currency,
     sortOrder: data.sort_order,
     isActive: data.is_active,
-    translations: normalizedTranslations,
-    featureIds: input.featureIds,
+    translations: input.translations,
+    featureIds,
   };
 }
 
 /**
- * Actualiza un paquete (PATCH parcial): precios/estado/orden, traducciones (upsert por locale)
- * y/o el set de features (reemplazo total). `NOT_FOUND` (404) si no existe. Un locale o featureId
- * inexistente → `VALIDATION_ERROR` (422).
+ * Actualiza un paquete (PATCH parcial). `NOT_FOUND` (404) si no existe.
+ *
+ * Semántica de REEMPLAZO para las colecciones (consistente entre traducciones y features): el
+ * array que mandás es el set deseado completo. Para traducciones, los locales ausentes en el
+ * payload se borran; para features, el set queda exactamente igual a `featureIds`.
+ *
+ * Ambos reemplazos son SEGUROS ante input inválido: primero se insertan/upsertan las filas nuevas
+ * (un locale o featureId inexistente falla por FK → 422 ANTES de borrar nada, dejando el estado
+ * actual intacto) y recién después se borran las que sobran. El estado final se arma en memoria:
+ * a diferencia de `plans` (donde un trigger recalcula `targetDailyPct`), acá no hay columna
+ * computada, así que una re-lectura sería un round-trip desperdiciado.
  */
 export async function updateAcademyPlan(
   admin: AppSupabaseClient,
   id: number,
   patch: AcademyPlanPatch,
 ): Promise<AcademyPlanAdminView> {
-  // 404 antes de tocar nada (y soporta PATCH de solo-traducciones/solo-features).
+  // 404 antes de tocar nada. Además nos da los locales/featureIds actuales para el diff.
   const existing = await getAcademyPlanDetail(admin, id);
   if (!existing) throw new AppError("NOT_FOUND", "Paquete no encontrado.", 404);
 
@@ -363,6 +346,9 @@ export async function updateAcademyPlan(
     if (error) throwPostgrestError(error, "No se pudo actualizar el paquete.", status);
   }
 
+  // Traducciones (reemplazo): upsert de las provistas PRIMERO (valida locales por FK antes de
+  // borrar nada), luego borra los locales que ya no estén en el payload.
+  let translations = existing.translations;
   if (patch.translations && patch.translations.length > 0) {
     const { error, status } = await admin.from("investep_plan_translations").upsert(
       patch.translations.map((t) => ({
@@ -373,30 +359,65 @@ export async function updateAcademyPlan(
       })),
       { onConflict: "investep_plan_id,locale" },
     );
-    if (error) throwTranslationError(error, status);
-  }
+    if (error)
+      throwForeignKeyAs422(error, TRANSLATION_LOCALE_INVALID, TRANSLATION_SAVE_FAILED, status);
 
-  // Reemplazo total del set de features: borrar las actuales y reinsertar las nuevas.
-  if (patch.featureIds !== undefined) {
-    const { error: delErr, status: delStatus } = await admin
-      .from("investep_plan_features")
-      .delete()
-      .eq("investep_plan_id", id);
-    if (delErr) throwFeatureError(delErr, delStatus);
-
-    if (patch.featureIds.length > 0) {
-      const { error: insErr, status: insStatus } = await admin
-        .from("investep_plan_features")
-        .insert(
-          patch.featureIds.map((fid) => ({ investep_plan_id: id, investep_feature_id: fid })),
-        );
-      if (insErr) throwFeatureError(insErr, insStatus);
+    const keep = new Set(patch.translations.map((t) => t.locale));
+    const localesToRemove = existing.translations
+      .map((t) => t.locale)
+      .filter((locale) => !keep.has(locale));
+    if (localesToRemove.length > 0) {
+      const { error: delErr, status: delStatus } = await admin
+        .from("investep_plan_translations")
+        .delete()
+        .eq("investep_plan_id", id)
+        .in("locale", localesToRemove);
+      if (delErr) throwPostgrestError(delErr, TRANSLATION_SAVE_FAILED, delStatus);
     }
+    translations = patch.translations;
   }
 
-  const updated = await getAcademyPlanDetail(admin, id);
-  if (!updated) throw new AppError("NOT_FOUND", "Paquete no encontrado.", 404);
-  return updated;
+  // Features (reemplazo por DIFF): insertar las faltantes PRIMERO (un featureId inválido falla
+  // por FK → 422 antes de borrar nada → set actual intacto), luego borrar las quitadas. El diff
+  // además evita escrituras en un no-op (mismo set) y no vacía la matriz ante un error.
+  let featureIds = existing.featureIds;
+  if (patch.featureIds !== undefined) {
+    const desired = Array.from(new Set(patch.featureIds));
+    const current = new Set(existing.featureIds);
+    const next = new Set(desired);
+    const toAdd = desired.filter((fid) => !current.has(fid));
+    const toRemove = existing.featureIds.filter((fid) => !next.has(fid));
+
+    if (toAdd.length > 0) {
+      const { error, status } = await admin
+        .from("investep_plan_features")
+        .insert(toAdd.map((fid) => ({ investep_plan_id: id, investep_feature_id: fid })));
+      if (error) throwForeignKeyAs422(error, FEATURE_INVALID, FEATURE_SAVE_FAILED, status);
+    }
+    if (toRemove.length > 0) {
+      const { error, status } = await admin
+        .from("investep_plan_features")
+        .delete()
+        .eq("investep_plan_id", id)
+        .in("investep_feature_id", toRemove);
+      if (error) throwPostgrestError(error, FEATURE_SAVE_FAILED, status);
+    }
+    featureIds = desired;
+  }
+
+  // Estado final en memoria: `existing` con el patch aplicado (?? respeta 0/false; priceOffer
+  // distingue null-explícito de "no tocar" vía !== undefined).
+  return {
+    id: existing.id,
+    slug: existing.slug,
+    priceRegular: patch.priceRegular ?? existing.priceRegular,
+    priceOffer: patch.priceOffer !== undefined ? patch.priceOffer : existing.priceOffer,
+    currency: patch.currency ?? existing.currency,
+    sortOrder: patch.sortOrder ?? existing.sortOrder,
+    isActive: patch.isActive ?? existing.isActive,
+    translations,
+    featureIds,
+  };
 }
 
 /**

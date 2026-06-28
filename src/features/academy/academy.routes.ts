@@ -13,6 +13,17 @@ const CurrencySchema = z
   .regex(/^[A-Z]{3}$/)
   .openapi({ example: "USD", description: "Código ISO 4217 (3 letras mayúsculas)." });
 
+// La columna es numeric(10,2): el máximo representable es 99_999_999.99. Sin este tope, un valor
+// mayor revienta como 22003 (numeric_value_out_of_range) → 500 en vez de 422.
+const PRICE_MAX = 99_999_999.99;
+const PriceSchema = z.number().nonnegative().max(PRICE_MAX);
+
+// Rechaza locales repetidos en un mismo payload: el upsert con dos filas (plan_id, locale)
+// dispara 21000 (cardinality_violation) → 500. Mejor cortarlo como 422 acá.
+const hasUniqueLocales = (arr: { locale: string }[]) =>
+  new Set(arr.map((t) => t.locale)).size === arr.length;
+const DUPLICATE_LOCALE_MSG = "No repitas el mismo locale en translations.";
+
 export const ListAcademyPlansQuerySchema = z.object({
   locale: z.string().min(2).max(10).optional().openapi({ example: "es" }),
 });
@@ -83,14 +94,15 @@ const AcademyPlansAdminResponseSchema = z
 export const CreateAcademyPlanSchema = z
   .object({
     slug: SlugSchema,
-    priceRegular: z.number().nonnegative().openapi({ example: 199.0 }),
-    priceOffer: z.number().nonnegative().nullable().optional().openapi({ example: 149.0 }),
+    priceRegular: PriceSchema.openapi({ example: 199.0 }),
+    priceOffer: PriceSchema.nullable().optional().openapi({ example: 149.0 }),
     currency: CurrencySchema.optional().openapi({ description: "Default 'USD' si se omite." }),
-    sortOrder: z.number().int().optional().openapi({ example: 3 }),
+    sortOrder: z.number().int().nonnegative().optional().openapi({ example: 3 }),
     isActive: z.boolean().optional().openapi({ example: true }),
     translations: z
       .array(AcademyPlanTranslationSchema)
       .min(1)
+      .refine(hasUniqueLocales, { message: DUPLICATE_LOCALE_MSG })
       .openapi({ description: "Textos por locale (recomendado: es y en)." }),
     featureIds: z
       .array(z.number().int().positive())
@@ -102,12 +114,16 @@ export const CreateAcademyPlanSchema = z
 /** Cuerpo de actualización: PATCH parcial. `slug` NO es editable (identificador estable). */
 export const UpdateAcademyPlanSchema = z
   .object({
-    priceRegular: z.number().nonnegative().optional(),
-    priceOffer: z.number().nonnegative().nullable().optional(),
+    priceRegular: PriceSchema.optional(),
+    priceOffer: PriceSchema.nullable().optional(),
     currency: CurrencySchema.optional(),
-    sortOrder: z.number().int().optional(),
+    sortOrder: z.number().int().nonnegative().optional(),
     isActive: z.boolean().optional(),
-    translations: z.array(AcademyPlanTranslationSchema).min(1).optional(),
+    translations: z
+      .array(AcademyPlanTranslationSchema)
+      .min(1)
+      .refine(hasUniqueLocales, { message: DUPLICATE_LOCALE_MSG })
+      .optional(),
     featureIds: z
       .array(z.number().int().positive())
       .optional()

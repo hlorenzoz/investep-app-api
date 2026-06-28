@@ -40,7 +40,10 @@ async function getAccessToken(): Promise<string> {
   const supabase = createClient(SUPABASE_URL, ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data, error } = await supabase.auth.signInWithPassword({ email: EMAIL, password: PASSWORD });
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: EMAIL,
+    password: PASSWORD,
+  });
   if (error || !data.session) {
     throw new Error(`No se pudo obtener el token e2e: ${error?.message ?? "sin sesión"}`);
   }
@@ -146,10 +149,50 @@ test.describe("academy: embedding M:N contra la DB real (E2E)", () => {
     const mine = body.plans.find((p) => p.slug === TEST_SLUG);
     expect(mine?.name).toBe("Paquete E2E");
     expect(mine?.features.map((f) => f.slug).sort()).toEqual(["community", "doublegreen"]);
-    expect(mine?.features.find((f) => f.slug === "doublegreen")?.label).toBe("DoubleGREEN (2 meses)");
+    expect(mine?.features.find((f) => f.slug === "doublegreen")?.label).toBe(
+      "DoubleGREEN (2 meses)",
+    );
 
     // Limpieza explícita vía la propia API (DELETE admin).
-    const deleted = await request.delete(`/admin/academy/plans/${plan.id}`, { headers: authHeaders });
+    const deleted = await request.delete(`/admin/academy/plans/${plan.id}`, {
+      headers: authHeaders,
+    });
     expect(deleted.status()).toBe(200);
+  });
+
+  test("PATCH con un featureId inválido → 422 y NO destruye las features existentes (DB real)", async ({
+    request,
+  }) => {
+    const [communityId] = await featureIdsBySlug(["community"]);
+
+    const created = await request.post("/admin/academy/plans", {
+      headers: authHeaders,
+      data: {
+        slug: TEST_SLUG,
+        priceRegular: 100,
+        currency: "USD",
+        isActive: true,
+        translations: [{ locale: "es", name: "Paquete E2E" }],
+        featureIds: [communityId],
+      },
+    });
+    expect(created.status()).toBe(201);
+    const { plan } = (await created.json()) as { plan: { id: number } };
+
+    // PATCH que pide reemplazar por [community, <id inexistente>]: el INSERT falla por FK.
+    const patched = await request.patch(`/admin/academy/plans/${plan.id}`, {
+      headers: authHeaders,
+      data: { featureIds: [communityId, 999_999_999] },
+    });
+    expect(patched.status()).toBe(422);
+
+    // Lo que importa: insert-before-delete → la feature original sigue ahí, NO se vació el set.
+    const list = await request.get("/admin/academy/plans", { headers: authHeaders });
+    const mine = (
+      (await list.json()) as { plans: { slug: string; featureIds: number[] }[] }
+    ).plans.find((p) => p.slug === TEST_SLUG);
+    expect(mine?.featureIds).toEqual([communityId]);
+
+    await request.delete(`/admin/academy/plans/${plan.id}`, { headers: authHeaders });
   });
 });

@@ -342,19 +342,27 @@ describe("Academy plans (admin)", () => {
     expect(logged).toEqual({ level: "error", event: "academy_plan_rollback_failed", planId: 12 });
   });
 
-  it("200 actualiza un paquete (scalar + reemplazo de features)", async () => {
-    const updatedRow = {
-      ...ADMIN_ROW,
-      is_active: true,
-      price_regular: "150.00",
-      investep_plan_features: [{ investep_feature_id: 5 }],
-    };
+  it("200 actualiza un paquete (scalar + reemplazo de features por diff)", async () => {
+    // ADMIN_ROW tiene features [1,2]; el patch deja [5] → toAdd=[5], toRemove=[1,2].
+    const featureInserts: number[] = [];
+    let featureDeleteRemoved: number[] = [];
     globalThis.fetch = mock(async (input: unknown, init?: RequestInit) => {
       const url = String(input);
       const method = (init?.method ?? "GET").toUpperCase();
       if (url.includes("/auth/v1/user")) return userResponse(true);
-      if (pathEndsWith(url, "/investep_plans") && method === "GET") return json([updatedRow], 200);
-      return json(null, 200); // PATCH plan, upsert traducciones, delete/insert features
+      if (pathEndsWith(url, "/investep_plans") && method === "GET") return json([ADMIN_ROW], 200);
+      if (pathEndsWith(url, "/investep_plan_features") && method === "POST") {
+        const rows = JSON.parse(String(init?.body)) as { investep_feature_id: number }[];
+        featureInserts.push(...rows.map((r) => r.investep_feature_id));
+        return json(null, 201);
+      }
+      if (pathEndsWith(url, "/investep_plan_features") && method === "DELETE") {
+        // El filtro .in(...) viaja en la query string: investep_feature_id=in.(1,2)
+        const param = new URL(url).searchParams.get("investep_feature_id") ?? "";
+        featureDeleteRemoved = param.match(/\d+/g)?.map(Number) ?? [];
+        return json(null, 200);
+      }
+      return json(null, 200); // PATCH plan, upsert traducciones
     }) as unknown as typeof fetch;
 
     const res = await createApp().request(
@@ -370,9 +378,156 @@ describe("Academy plans (admin)", () => {
     const body = (await res.json()) as {
       plan: { priceRegular: number; isActive: boolean; featureIds: number[] };
     };
+    // El estado final se arma en memoria desde existing + patch (sin re-lectura).
     expect(body.plan.priceRegular).toBe(150);
     expect(body.plan.isActive).toBe(true);
     expect(body.plan.featureIds).toEqual([5]);
+    // Diff: insertó solo la nueva (5) y borró solo las quitadas (1,2).
+    expect(featureInserts).toEqual([5]);
+    expect(featureDeleteRemoved).toEqual([1, 2]);
+  });
+
+  it("#1: un featureId inválido en PATCH devuelve 422 SIN borrar las features actuales", async () => {
+    let featureDeleteCalled = false;
+    globalThis.fetch = mock(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url.includes("/auth/v1/user")) return userResponse(true);
+      if (pathEndsWith(url, "/investep_plans") && method === "GET") return json([ADMIN_ROW], 200);
+      if (pathEndsWith(url, "/investep_plan_features") && method === "POST")
+        return json({ code: "23503", message: "fk violation", details: "", hint: "" }, 409);
+      if (pathEndsWith(url, "/investep_plan_features") && method === "DELETE") {
+        featureDeleteCalled = true;
+        return json(null, 200);
+      }
+      return json(null, 200);
+    }) as unknown as typeof fetch;
+
+    const res = await createApp().request(
+      "/admin/academy/plans/3",
+      {
+        method: "PATCH",
+        headers: { ...AUTH, "content-type": "application/json" },
+        body: JSON.stringify({ featureIds: [999999] }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    // Insert-before-delete: el insert falla primero, así que NUNCA se borraron las features actuales.
+    expect(featureDeleteCalled).toBe(false);
+  });
+
+  it("#5: PATCH de traducciones reemplaza el set — borra el locale omitido", async () => {
+    // ADMIN_ROW tiene traducciones [es]; mandamos solo [en] → upsert en + borrar es.
+    const existingTwoLocales = {
+      ...ADMIN_ROW,
+      investep_plan_translations: [
+        { locale: "es", name: "Gold", subtitle: null },
+        { locale: "en", name: "Gold EN", subtitle: null },
+      ],
+    };
+    let removedLocales: string[] = [];
+    globalThis.fetch = mock(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url.includes("/auth/v1/user")) return userResponse(true);
+      if (pathEndsWith(url, "/investep_plans") && method === "GET")
+        return json([existingTwoLocales], 200);
+      if (pathEndsWith(url, "/investep_plan_translations") && method === "DELETE") {
+        // locale=in.(es) o in.("es") → extraemos los códigos dentro de los paréntesis.
+        const param = new URL(url).searchParams.get("locale") ?? "";
+        removedLocales = param
+          .replace(/^in\./, "")
+          .replace(/[()"]/g, "")
+          .split(",")
+          .filter(Boolean);
+        return json(null, 200);
+      }
+      return json(null, 200); // upsert traducciones (POST), PATCH plan
+    }) as unknown as typeof fetch;
+
+    const res = await createApp().request(
+      "/admin/academy/plans/3",
+      {
+        method: "PATCH",
+        headers: { ...AUTH, "content-type": "application/json" },
+        body: JSON.stringify({ translations: [{ locale: "en", name: "Gold EN" }] }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { plan: { translations: { locale: string }[] } };
+    // Borró el locale que ya no viene (es) y dejó exactamente lo enviado (en).
+    expect(removedLocales).toEqual(["es"]);
+    expect(body.plan.translations.map((t) => t.locale)).toEqual(["en"]);
+  });
+
+  // --- Validación de input (422 ANTES de tocar la DB): #2 locales dup, #3 precio, #7 sortOrder ---
+
+  function adminOnlyFetch() {
+    globalThis.fetch = mock(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/auth/v1/user")) return userResponse(true);
+      return json(null, 200);
+    }) as unknown as typeof fetch;
+  }
+
+  it("#2: 422 cuando el create trae locales duplicados en translations", async () => {
+    adminOnlyFetch();
+    const res = await createApp().request(
+      "/admin/academy/plans",
+      createReq({
+        ...CREATE_PAYLOAD,
+        translations: [
+          { locale: "es", name: "A" },
+          { locale: "es", name: "B" },
+        ],
+      }),
+      ENV,
+    );
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("#2: 422 cuando el PATCH trae locales duplicados en translations", async () => {
+    adminOnlyFetch();
+    const res = await createApp().request(
+      "/admin/academy/plans/3",
+      {
+        method: "PATCH",
+        headers: { ...AUTH, "content-type": "application/json" },
+        body: JSON.stringify({
+          translations: [
+            { locale: "en", name: "A" },
+            { locale: "en", name: "B" },
+          ],
+        }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it("#3: 422 cuando priceRegular excede numeric(10,2) (overflow)", async () => {
+    adminOnlyFetch();
+    const res = await createApp().request(
+      "/admin/academy/plans",
+      createReq({ ...CREATE_PAYLOAD, priceRegular: 100_000_000 }),
+      ENV,
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it("#7: 422 cuando sortOrder es negativo", async () => {
+    adminOnlyFetch();
+    const res = await createApp().request(
+      "/admin/academy/plans",
+      createReq({ ...CREATE_PAYLOAD, sortOrder: -1 }),
+      ENV,
+    );
+    expect(res.status).toBe(422);
   });
 
   it("404 al actualizar un paquete inexistente", async () => {
