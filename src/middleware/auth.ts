@@ -1,4 +1,4 @@
-import { isAuthApiError } from "@supabase/supabase-js";
+import { isAuthError } from "@supabase/supabase-js";
 import type { MiddlewareHandler } from "hono";
 import { IS_ADMIN_KEY, MUST_RESET_PASSWORD_KEY } from "../features/auth/metadata";
 import { AppError } from "../lib/errors";
@@ -37,7 +37,8 @@ export async function verifySupabaseToken(env: Env, token: string): Promise<Auth
   if (error) {
     // GoTrue RECHAZÓ el token explícitamente (4xx, salvo rate-limit) → no autorizado.
     if (
-      isAuthApiError(error) &&
+      isAuthError(error) &&
+      error.status != null &&
       error.status >= 400 &&
       error.status < 500 &&
       error.status !== 429
