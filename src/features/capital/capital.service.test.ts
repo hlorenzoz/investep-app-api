@@ -71,6 +71,7 @@ function makeRepo(opts?: {
         targetMonthlyPct: plan?.targetMonthlyPct ?? 0,
         initialDeposit: input.initialDeposit,
         currency: input.currency,
+        createdAt: "2026-01-01T00:00:00.000Z",
       };
       allocations.push({ userId, row });
       return { ...row };
@@ -114,6 +115,7 @@ function alloc(userId: string, over: Partial<AllocationRow> & { id: string }): S
       targetMonthlyPct: 25,
       initialDeposit: 1000,
       currency: "USD",
+      createdAt: "2026-01-01T00:00:00.000Z",
       ...over,
     },
   };
