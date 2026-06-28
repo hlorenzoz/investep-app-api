@@ -4,6 +4,7 @@ import { Scalar } from "@scalar/hono-api-reference";
 import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 
+import { academyRouter, adminAcademyRouter } from "./features/academy";
 import { authRouter } from "./features/auth";
 import { adminBrokersRouter, brokersRouter } from "./features/brokers";
 import { capitalRouter } from "./features/capital";
@@ -41,10 +42,12 @@ export function createApp() {
   app.route("/capital", capitalRouter);
   app.route("/portfolio", portfolioRouter);
   app.route("/brokers", brokersRouter);
+  app.route("/academy/plans", academyRouter);
 
   // --- Admin: CRUD de catálogos, protegido por `requireAdmin` (AGENTS.md §5/§6) ---
   app.route("/admin/brokers", adminBrokersRouter);
   app.route("/admin/plans", adminPlansRouter);
+  app.route("/admin/academy/plans", adminAcademyRouter);
 
   // Esquema de seguridad para el spec OpenAPI (Bearer JWT de Supabase Auth).
   app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
