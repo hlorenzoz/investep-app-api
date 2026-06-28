@@ -39,6 +39,7 @@ const PLANS_ROW = [
     id: 1,
     account_type: "equity",
     target_monthly_pct: "25.00",
+    target_daily_pct: "1.25",
     investment_plan_translations: [
       { label: "Activos 25% mensual", locale: "es" },
       { label: "Equity 25% monthly", locale: "en" },
@@ -69,13 +70,20 @@ describe("GET /plans", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       locale: string;
-      plans: { id: number; accountType: string; targetMonthlyPct: number; label: string | null }[];
+      plans: {
+        id: number;
+        accountType: string;
+        targetMonthlyPct: number;
+        targetDailyPct: number | null;
+        label: string | null;
+      }[];
     };
     expect(body.locale).toBe("es");
     expect(body.plans[0]).toEqual({
       id: 1,
       accountType: "equity",
       targetMonthlyPct: 25,
+      targetDailyPct: 1.25,
       label: "Activos 25% mensual",
     });
   });
