@@ -321,9 +321,14 @@ export async function createAcademyPlan(
  *
  * Ambos reemplazos son SEGUROS ante input inválido: primero se insertan/upsertan las filas nuevas
  * (un locale o featureId inexistente falla por FK → 422 ANTES de borrar nada, dejando el estado
- * actual intacto) y recién después se borran las que sobran. El estado final se arma en memoria:
- * a diferencia de `plans` (donde un trigger recalcula `targetDailyPct`), acá no hay columna
- * computada, así que una re-lectura sería un round-trip desperdiciado.
+ * actual intacto) y recién después se borran las que sobran. OJO: esto NO da atomicidad — si un
+ * fallo TRANSITORIO cae entre el insert/upsert y el delete, puede quedar un estado parcial (mismo
+ * límite no-transaccional que el create); el reintento converge. Atomicidad real requeriría una RPC.
+ *
+ * El estado final se arma en memoria: a diferencia de `plans` (donde un trigger recalcula
+ * `targetDailyPct`), acá no hay columna computada, así que una re-lectura sería un round-trip
+ * desperdiciado. (Los precios ya vienen acotados a numeric(10,2) por Zod, así que la respuesta
+ * en memoria coincide con lo persistido.)
  */
 export async function updateAcademyPlan(
   admin: AppSupabaseClient,

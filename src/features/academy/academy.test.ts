@@ -520,6 +520,18 @@ describe("Academy plans (admin)", () => {
     expect(res.status).toBe(422);
   });
 
+  it("#3: 422 cuando priceRegular tiene más de 2 decimales (numeric(10,2) redondearía)", async () => {
+    adminOnlyFetch();
+    const res = await createApp().request(
+      "/admin/academy/plans",
+      createReq({ ...CREATE_PAYLOAD, priceRegular: 19.999 }),
+      ENV,
+    );
+    // Rechazar acá evita que el PATCH (que arma la respuesta en memoria) devuelva un precio
+    // distinto al que la DB realmente guarda tras redondear.
+    expect(res.status).toBe(422);
+  });
+
   it("#7: 422 cuando sortOrder es negativo", async () => {
     adminOnlyFetch();
     const res = await createApp().request(

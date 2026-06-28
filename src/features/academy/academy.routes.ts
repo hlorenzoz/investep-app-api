@@ -13,10 +13,12 @@ const CurrencySchema = z
   .regex(/^[A-Z]{3}$/)
   .openapi({ example: "USD", description: "Código ISO 4217 (3 letras mayúsculas)." });
 
-// La columna es numeric(10,2): el máximo representable es 99_999_999.99. Sin este tope, un valor
-// mayor revienta como 22003 (numeric_value_out_of_range) → 500 en vez de 422.
+// La columna es numeric(10,2): máximo 99_999_999.99 y 2 decimales. Sin estos límites: un valor
+// mayor revienta como 22003 → 500; y >2 decimales se redondea en la DB pero el PATCH arma su
+// respuesta en memoria (sin re-leer), así que devolvería un precio que NO coincide con lo guardado.
+// `multipleOf(0.01)` lo corta como 422 y mantiene respuesta == DB.
 const PRICE_MAX = 99_999_999.99;
-const PriceSchema = z.number().nonnegative().max(PRICE_MAX);
+const PriceSchema = z.number().nonnegative().max(PRICE_MAX).multipleOf(0.01);
 
 // Rechaza locales repetidos en un mismo payload: el upsert con dos filas (plan_id, locale)
 // dispara 21000 (cardinality_violation) → 500. Mejor cortarlo como 422 acá.
