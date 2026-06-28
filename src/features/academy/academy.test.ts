@@ -699,3 +699,132 @@ describe("Academy plans (admin)", () => {
     expect(body.error.code).toBe("SERVICE_UNAVAILABLE");
   });
 });
+
+describe("Academy plans (admin): authz por endpoint y casos límite (test:review)", () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  // Auth válido pero NO admin → requireAdmin debe cortar con 403 en CADA mutación.
+  function nonAdminFetch() {
+    globalThis.fetch = mock(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/auth/v1/user")) return userResponse(false);
+      return json(null, 200);
+    }) as unknown as typeof fetch;
+  }
+
+  it("authz: 403 al CREAR siendo no-admin (la ruta vive bajo requireAdmin)", async () => {
+    nonAdminFetch();
+    const res = await createApp().request("/admin/academy/plans", createReq(CREATE_PAYLOAD), ENV);
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("FORBIDDEN");
+  });
+
+  it("authz: 403 al ACTUALIZAR siendo no-admin", async () => {
+    nonAdminFetch();
+    const res = await createApp().request(
+      "/admin/academy/plans/3",
+      {
+        method: "PATCH",
+        headers: { ...AUTH, "content-type": "application/json" },
+        body: JSON.stringify({ priceRegular: 10 }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("authz: 403 al ELIMINAR siendo no-admin", async () => {
+    nonAdminFetch();
+    const res = await createApp().request(
+      "/admin/academy/plans/3",
+      { method: "DELETE", headers: AUTH },
+      ENV,
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("límite (dinero): priceOffer null se mapea a null, NO a 0", async () => {
+    // ADMIN_ROW.price_offer === null. Mata la mutación `Number(null)` (=0): un 'sin oferta'
+    // que se convierta en 'oferta = 0' es un bug de precio.
+    globalThis.fetch = mock(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/auth/v1/user")) return userResponse(true);
+      return json([ADMIN_ROW], 200);
+    }) as unknown as typeof fetch;
+
+    const res = await createApp().request("/admin/academy/plans", { headers: AUTH }, ENV);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { plans: { priceOffer: number | null }[] };
+    expect(body.plans[0]?.priceOffer).toBeNull();
+  });
+
+  it("límite: PATCH featureIds:[] vacía el set (borra todas, no inserta)", async () => {
+    let removed: number[] = [];
+    let insertCalled = false;
+    globalThis.fetch = mock(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url.includes("/auth/v1/user")) return userResponse(true);
+      if (pathEndsWith(url, "/investep_plans") && method === "GET") return json([ADMIN_ROW], 200);
+      if (pathEndsWith(url, "/investep_plan_features") && method === "POST") {
+        insertCalled = true;
+        return json(null, 201);
+      }
+      if (pathEndsWith(url, "/investep_plan_features") && method === "DELETE") {
+        const p = new URL(url).searchParams.get("investep_feature_id") ?? "";
+        removed = p.match(/\d+/g)?.map(Number) ?? [];
+        return json(null, 200);
+      }
+      return json(null, 200);
+    }) as unknown as typeof fetch;
+
+    const res = await createApp().request(
+      "/admin/academy/plans/3",
+      {
+        method: "PATCH",
+        headers: { ...AUTH, "content-type": "application/json" },
+        body: JSON.stringify({ featureIds: [] }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { plan: { featureIds: number[] } };
+    expect(body.plan.featureIds).toEqual([]);
+    expect(removed).toEqual([1, 2]); // borró TODAS las actuales (ADMIN_ROW tenía [1,2])
+    expect(insertCalled).toBe(false); // y no insertó nada
+  });
+
+  it("happy: PATCH solo-escalar no toca traducciones ni features (las deja intactas)", async () => {
+    let featuresTouched = false;
+    let translationsTouched = false;
+    globalThis.fetch = mock(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url.includes("/auth/v1/user")) return userResponse(true);
+      if (pathEndsWith(url, "/investep_plans") && method === "GET") return json([ADMIN_ROW], 200);
+      if (pathEndsWith(url, "/investep_plan_features") && method !== "GET") featuresTouched = true;
+      if (pathEndsWith(url, "/investep_plan_translations") && method !== "GET")
+        translationsTouched = true;
+      return json(null, 200);
+    }) as unknown as typeof fetch;
+
+    const res = await createApp().request(
+      "/admin/academy/plans/3",
+      {
+        method: "PATCH",
+        headers: { ...AUTH, "content-type": "application/json" },
+        body: JSON.stringify({ isActive: true }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { plan: { isActive: boolean; featureIds: number[] } };
+    expect(body.plan.isActive).toBe(true);
+    expect(body.plan.featureIds).toEqual([1, 2]); // intactas (no se enviaron en el patch)
+    expect(featuresTouched).toBe(false);
+    expect(translationsTouched).toBe(false);
+  });
+});
