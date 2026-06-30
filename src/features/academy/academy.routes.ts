@@ -168,7 +168,7 @@ export type ListAcademyPlansRoute = typeof listAcademyPlansRoute;
 // --- GET /admin/academy/plans (admin) ---
 export const listAcademyPlansAdminRoute = createRoute({
   method: "get",
-  path: "/",
+  path: "/plans",
   tags: ["Academy", "Admin"],
   summary: "Listar paquetes (admin)",
   description:
@@ -192,7 +192,7 @@ export type ListAcademyPlansAdminRoute = typeof listAcademyPlansAdminRoute;
 // --- POST /admin/academy/plans (admin) ---
 export const createAcademyPlanRoute = createRoute({
   method: "post",
-  path: "/",
+  path: "/plans",
   tags: ["Academy", "Admin"],
   summary: "Crear un paquete (admin)",
   description:
@@ -221,7 +221,7 @@ export type CreateAcademyPlanRoute = typeof createAcademyPlanRoute;
 // --- PATCH /admin/academy/plans/{id} (admin) ---
 export const updateAcademyPlanRoute = createRoute({
   method: "patch",
-  path: "/{id}",
+  path: "/plans/{id}",
   tags: ["Academy", "Admin"],
   summary: "Actualizar un paquete (admin)",
   description:
@@ -251,7 +251,7 @@ export type UpdateAcademyPlanRoute = typeof updateAcademyPlanRoute;
 // --- DELETE /admin/academy/plans/{id} (admin) ---
 export const deleteAcademyPlanRoute = createRoute({
   method: "delete",
-  path: "/{id}",
+  path: "/plans/{id}",
   tags: ["Academy", "Admin"],
   summary: "Eliminar un paquete (admin)",
   description:
@@ -274,3 +274,180 @@ export const deleteAcademyPlanRoute = createRoute({
   },
 });
 export type DeleteAcademyPlanRoute = typeof deleteAcademyPlanRoute;
+
+// --- Administración de Características (Features) ---
+
+export const AcademyFeatureTranslationSchema = z
+  .object({
+    locale: z.string().min(2).max(10).openapi({ example: "es" }),
+    label: z.string().min(1).openapi({ example: "Comunidad" }),
+  })
+  .openapi("AcademyFeatureTranslation");
+
+export const AcademyFeatureAdminSchema = z
+  .object({
+    id: z.number().openapi({ example: 1 }),
+    slug: SlugSchema,
+    sortOrder: z.number().openapi({ example: 0 }),
+    translations: z.array(AcademyFeatureTranslationSchema),
+  })
+  .openapi("AcademyFeatureAdmin");
+
+export const CreateAcademyFeatureSchema = z
+  .object({
+    slug: SlugSchema,
+    sortOrder: z.number().int().nonnegative().optional().default(0).openapi({ example: 0 }),
+    translations: z
+      .array(AcademyFeatureTranslationSchema)
+      .min(1)
+      .refine(hasUniqueLocales, { message: DUPLICATE_LOCALE_MSG })
+      .openapi({ description: "Traducciones de la característica (mínimo 1)." }),
+  })
+  .openapi("CreateAcademyFeature");
+
+export const UpdateAcademyFeatureSchema = z
+  .object({
+    sortOrder: z.number().int().nonnegative().optional(),
+    translations: z
+      .array(AcademyFeatureTranslationSchema)
+      .min(1)
+      .refine(hasUniqueLocales, { message: DUPLICATE_LOCALE_MSG })
+      .optional()
+      .openapi({ description: "Traducciones de la característica (mínimo 1 si se envía)." }),
+  })
+  .openapi("UpdateAcademyFeature");
+
+const AcademyFeatureIdParamSchema = z.object({
+  id: z.coerce
+    .number()
+    .int()
+    .positive()
+    .openapi({
+      param: { name: "id", in: "path" },
+      example: 1,
+      description: "Id de la característica.",
+    }),
+});
+
+const AcademyFeatureEnvelopeSchema = z
+  .object({ feature: AcademyFeatureAdminSchema })
+  .openapi("AcademyFeatureEnvelope");
+
+const AcademyFeaturesAdminResponseSchema = z
+  .object({ features: z.array(AcademyFeatureAdminSchema) })
+  .openapi("AcademyFeaturesAdminResponse");
+
+// --- GET /admin/academy/features (admin) ---
+export const listAcademyFeaturesRoute = createRoute({
+  method: "get",
+  path: "/features",
+  tags: ["Academy", "Admin"],
+  summary: "Listar características (admin)",
+  description:
+    "Lista todas las características ordenadas por `sort_order` con todas sus traducciones. " +
+    "SOLO administradores (**403**).",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      content: { "application/json": { schema: AcademyFeaturesAdminResponseSchema } },
+      description: "Todas las características.",
+    },
+    401: jsonErrorResponse("Falta o es inválido el token (`UNAUTHORIZED`)."),
+    403: jsonErrorResponse("El usuario no es administrador (`FORBIDDEN`)."),
+    503: jsonErrorResponse(
+      "Supabase no disponible (`SERVICE_UNAVAILABLE`). Transitorio: reintentá.",
+    ),
+  },
+});
+export type ListAcademyFeaturesRoute = typeof listAcademyFeaturesRoute;
+
+// --- POST /admin/academy/features (admin) ---
+export const createAcademyFeatureRoute = createRoute({
+  method: "post",
+  path: "/features",
+  tags: ["Academy", "Admin"],
+  summary: "Crear una característica (admin)",
+  description:
+    "Crea una característica con sus traducciones. SOLO administradores (**403**). " +
+    "`slug` único → **409**. Locales inexistentes en la DB → **422**.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { "application/json": { schema: CreateAcademyFeatureSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    201: {
+      content: { "application/json": { schema: AcademyFeatureEnvelopeSchema } },
+      description: "Característica creada.",
+    },
+    401: jsonErrorResponse("Falta o es inválido el token (`UNAUTHORIZED`)."),
+    403: jsonErrorResponse("El usuario no es administrador (`FORBIDDEN`)."),
+    409: jsonErrorResponse("Ya existe una característica con ese slug (`CONFLICT`)."),
+    422: jsonErrorResponse("Entrada inválida o locales inexistentes (`VALIDATION_ERROR`)."),
+    503: jsonErrorResponse(
+      "Supabase no disponible (`SERVICE_UNAVAILABLE`). Transitorio: reintentá.",
+    ),
+  },
+});
+export type CreateAcademyFeatureRoute = typeof createAcademyFeatureRoute;
+
+// --- PATCH /admin/academy/features/{id} (admin) ---
+export const updateAcademyFeatureRoute = createRoute({
+  method: "patch",
+  path: "/features/{id}",
+  tags: ["Academy", "Admin"],
+  summary: "Actualizar una característica (admin)",
+  description:
+    "Actualización parcial de la característica (orden y/o traducciones). " +
+    "SOLO administradores (**403**). `slug` NO es editable.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: AcademyFeatureIdParamSchema,
+    body: {
+      content: { "application/json": { schema: UpdateAcademyFeatureSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      content: { "application/json": { schema: AcademyFeatureEnvelopeSchema } },
+      description: "Característica actualizada.",
+    },
+    401: jsonErrorResponse("Falta o es inválido el token (`UNAUTHORIZED`)."),
+    403: jsonErrorResponse("El usuario no es administrador (`FORBIDDEN`)."),
+    404: jsonErrorResponse("No existe una característica con ese id (`NOT_FOUND`)."),
+    422: jsonErrorResponse("Entrada inválida o locales inexistentes (`VALIDATION_ERROR`)."),
+    503: jsonErrorResponse(
+      "Supabase no disponible (`SERVICE_UNAVAILABLE`). Transitorio: reintentá.",
+    ),
+  },
+});
+export type UpdateAcademyFeatureRoute = typeof updateAcademyFeatureRoute;
+
+// --- DELETE /admin/academy/features/{id} (admin) ---
+export const deleteAcademyFeatureRoute = createRoute({
+  method: "delete",
+  path: "/features/{id}",
+  tags: ["Academy", "Admin"],
+  summary: "Eliminar una característica (admin)",
+  description:
+    "Baja de una característica; traducciones y asociaciones caen por `ON DELETE CASCADE`. " +
+    "SOLO administradores (**403**).",
+  security: [{ bearerAuth: [] }],
+  request: { params: AcademyFeatureIdParamSchema },
+  responses: {
+    200: {
+      content: { "application/json": { schema: z.object({ deleted: z.literal(true) }) } },
+      description: "Característica eliminada.",
+    },
+    401: jsonErrorResponse("Falta o es inválido el token (`UNAUTHORIZED`)."),
+    403: jsonErrorResponse("El usuario no es administrador (`FORBIDDEN`)."),
+    404: jsonErrorResponse("No existe una característica con ese id (`NOT_FOUND`)."),
+    503: jsonErrorResponse(
+      "Supabase no disponible (`SERVICE_UNAVAILABLE`). Transitorio: reintentá.",
+    ),
+  },
+});
+export type DeleteAcademyFeatureRoute = typeof deleteAcademyFeatureRoute;

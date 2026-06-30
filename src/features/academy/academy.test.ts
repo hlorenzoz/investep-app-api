@@ -830,3 +830,259 @@ describe("Academy plans (admin): authz por endpoint y casos límite (test:review
     expect(translationsTouched).toBe(false);
   });
 });
+
+describe("Academy features (admin)", () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const FEATURE_ROW = {
+    id: 1,
+    slug: "live_sessions",
+    sort_order: 0,
+    investep_feature_translations: [{ locale: "es", label: "Sesiones en vivo" }],
+  };
+
+  const CREATE_FEATURE_PAYLOAD = {
+    slug: "live_sessions",
+    sortOrder: 0,
+    translations: [{ locale: "es", label: "Sesiones en vivo" }],
+  };
+
+  const createFeatureReq = (payload: unknown) => ({
+    method: "POST",
+    headers: { ...AUTH, "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  it("403 cuando el usuario no es admin", async () => {
+    globalThis.fetch = mock(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/auth/v1/user")) return userResponse(false);
+      return json([], 200);
+    }) as unknown as typeof fetch;
+
+    const res = await createApp().request("/admin/academy/features", { headers: AUTH }, ENV);
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("FORBIDDEN");
+  });
+
+  it("200 lista todas las características con traducciones", async () => {
+    globalThis.fetch = mock(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/auth/v1/user")) return userResponse(true);
+      return json([FEATURE_ROW], 200);
+    }) as unknown as typeof fetch;
+
+    const res = await createApp().request("/admin/academy/features", { headers: AUTH }, ENV);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      features: {
+        id: number;
+        slug: string;
+        sortOrder: number;
+        translations: { locale: string; label: string }[];
+      }[];
+    };
+    expect(body.features[0]).toMatchObject({ id: 1, slug: "live_sessions", sortOrder: 0 });
+    expect(body.features[0]?.translations[0]?.label).toBe("Sesiones en vivo");
+  });
+
+  it("201 crea una característica", async () => {
+    const scalar = {
+      id: 5,
+      slug: "live_sessions",
+      sort_order: 0,
+    };
+    globalThis.fetch = mock(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url.includes("/auth/v1/user")) return userResponse(true);
+      if (pathEndsWith(url, "/investep_features") && method === "POST") return json(scalar, 201);
+      if (pathEndsWith(url, "/investep_feature_translations")) return json(null, 201);
+      return json(null, 200);
+    }) as unknown as typeof fetch;
+
+    const res = await createApp().request(
+      "/admin/academy/features",
+      createFeatureReq(CREATE_FEATURE_PAYLOAD),
+      ENV,
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as {
+      feature: {
+        id: number;
+        slug: string;
+        sortOrder: number;
+        translations: { locale: string; label: string }[];
+      };
+    };
+    expect(body.feature.id).toBe(5);
+    expect(body.feature.slug).toBe("live_sessions");
+    expect(body.feature.translations[0]?.label).toBe("Sesiones en vivo");
+  });
+
+  it("409 cuando el slug ya existe", async () => {
+    globalThis.fetch = mock(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url.includes("/auth/v1/user")) return userResponse(true);
+      if (pathEndsWith(url, "/investep_features") && method === "POST")
+        return json({ code: "23505", message: "duplicate", details: "", hint: "" }, 409);
+      return json(null, 200);
+    }) as unknown as typeof fetch;
+
+    const res = await createApp().request(
+      "/admin/academy/features",
+      createFeatureReq(CREATE_FEATURE_PAYLOAD),
+      ENV,
+    );
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("CONFLICT");
+  });
+
+  it("422 cuando un locale no existe y hace rollback", async () => {
+    const scalar = {
+      id: 6,
+      slug: "live_sessions",
+      sort_order: 0,
+    };
+    let deletedFeature = false;
+    globalThis.fetch = mock(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url.includes("/auth/v1/user")) return userResponse(true);
+      if (pathEndsWith(url, "/investep_features") && method === "POST") return json(scalar, 201);
+      if (pathEndsWith(url, "/investep_features") && method === "DELETE") {
+        deletedFeature = true;
+        return json([{ id: 6 }], 200);
+      }
+      if (pathEndsWith(url, "/investep_feature_translations"))
+        return json({ code: "23503", message: "fk violation", details: "", hint: "" }, 409);
+      return json(null, 200);
+    }) as unknown as typeof fetch;
+
+    const res = await createApp().request(
+      "/admin/academy/features",
+      createFeatureReq(CREATE_FEATURE_PAYLOAD),
+      ENV,
+    );
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(deletedFeature).toBe(true);
+  });
+
+  it("200 actualiza orden y reemplaza traducciones en PATCH", async () => {
+    const existingFeature = {
+      id: 1,
+      slug: "live_sessions",
+      sort_order: 0,
+      investep_feature_translations: [
+        { locale: "es", label: "Sesiones en vivo" },
+        { locale: "en", label: "Live sessions" },
+      ],
+    };
+    let deleteCalled = false;
+    let upsertCalled = false;
+
+    globalThis.fetch = mock(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url.includes("/auth/v1/user")) return userResponse(true);
+      if (pathEndsWith(url, "/investep_features") && method === "GET")
+        return json([existingFeature], 200);
+      if (pathEndsWith(url, "/investep_features") && method === "PATCH") return json(null, 200);
+      if (pathEndsWith(url, "/investep_feature_translations") && method === "POST") {
+        upsertCalled = true;
+        return json(null, 201);
+      }
+      if (pathEndsWith(url, "/investep_feature_translations") && method === "DELETE") {
+        deleteCalled = true;
+        const locales = parseInFilter(url, "locale");
+        expect(locales).toEqual(["en"]);
+        return json(null, 200);
+      }
+      return json(null, 200);
+    }) as unknown as typeof fetch;
+
+    const res = await createApp().request(
+      "/admin/academy/features/1",
+      {
+        method: "PATCH",
+        headers: { ...AUTH, "content-type": "application/json" },
+        body: JSON.stringify({
+          sortOrder: 1,
+          translations: [{ locale: "es", label: "Sesiones en vivo actualizadas" }],
+        }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      feature: { id: number; sortOrder: number; translations: { locale: string; label: string }[] };
+    };
+    expect(body.feature.sortOrder).toBe(1);
+    expect(body.feature.translations).toEqual([
+      { locale: "es", label: "Sesiones en vivo actualizadas" },
+    ]);
+    expect(upsertCalled).toBe(true);
+    expect(deleteCalled).toBe(true);
+  });
+
+  it("404 en PATCH si la característica no existe", async () => {
+    globalThis.fetch = mock(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/auth/v1/user")) return userResponse(true);
+      if (pathEndsWith(url, "/investep_features")) return json([], 200);
+      return json(null, 200);
+    }) as unknown as typeof fetch;
+
+    const res = await createApp().request(
+      "/admin/academy/features/999",
+      {
+        method: "PATCH",
+        headers: { ...AUTH, "content-type": "application/json" },
+        body: JSON.stringify({ sortOrder: 1 }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("200 elimina característica y 404 si no existe", async () => {
+    let deleteCalled = false;
+    globalThis.fetch = mock(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url.includes("/auth/v1/user")) return userResponse(true);
+      if (pathEndsWith(url, "/investep_features") && method === "DELETE") {
+        deleteCalled = true;
+        const matches = url.match(/id=eq\.(\d+)/);
+        if (matches?.[1] === "1") {
+          return json([{ id: 1 }], 200);
+        }
+        return json([], 200);
+      }
+      return json(null, 200);
+    }) as unknown as typeof fetch;
+
+    const res = await createApp().request(
+      "/admin/academy/features/1",
+      { method: "DELETE", headers: AUTH },
+      ENV,
+    );
+    expect(res.status).toBe(200);
+    expect(deleteCalled).toBe(true);
+
+    const res404 = await createApp().request(
+      "/admin/academy/features/999",
+      { method: "DELETE", headers: AUTH },
+      ENV,
+    );
+    expect(res404.status).toBe(404);
+  });
+});

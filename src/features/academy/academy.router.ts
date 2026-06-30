@@ -4,17 +4,25 @@ import { requireAdmin } from "../../middleware/admin";
 import { requireAuth } from "../../middleware/auth";
 import type { AuthedBindings } from "../../types/app";
 import {
+  createAcademyFeatureHandler,
   createAcademyPlanHandler,
+  deleteAcademyFeatureHandler,
   deleteAcademyPlanHandler,
+  listAcademyFeaturesHandler,
   listAcademyPlansAdminHandler,
   listAcademyPlansHandler,
+  updateAcademyFeatureHandler,
   updateAcademyPlanHandler,
 } from "./academy.handlers";
 import {
+  createAcademyFeatureRoute,
   createAcademyPlanRoute,
+  deleteAcademyFeatureRoute,
   deleteAcademyPlanRoute,
+  listAcademyFeaturesRoute,
   listAcademyPlansAdminRoute,
   listAcademyPlansRoute,
+  updateAcademyFeatureRoute,
   updateAcademyPlanRoute,
 } from "./academy.routes";
 
@@ -42,4 +50,8 @@ adminAcademyRouter
   .openapi(listAcademyPlansAdminRoute, listAcademyPlansAdminHandler)
   .openapi(createAcademyPlanRoute, createAcademyPlanHandler)
   .openapi(updateAcademyPlanRoute, updateAcademyPlanHandler)
-  .openapi(deleteAcademyPlanRoute, deleteAcademyPlanHandler);
+  .openapi(deleteAcademyPlanRoute, deleteAcademyPlanHandler)
+  .openapi(listAcademyFeaturesRoute, listAcademyFeaturesHandler)
+  .openapi(createAcademyFeatureRoute, createAcademyFeatureHandler)
+  .openapi(updateAcademyFeatureRoute, updateAcademyFeatureHandler)
+  .openapi(deleteAcademyFeatureRoute, deleteAcademyFeatureHandler);

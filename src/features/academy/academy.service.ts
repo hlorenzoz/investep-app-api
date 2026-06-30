@@ -447,3 +447,289 @@ export async function deleteAcademyPlan(admin: AppSupabaseClient, id: number): P
   }
   if ((data?.length ?? 0) === 0) throw new AppError("NOT_FOUND", "Paquete no encontrado.", 404);
 }
+
+// ---------------------------------------------------------------------------
+// Administración de Características (Features)
+// ---------------------------------------------------------------------------
+
+export interface AcademyFeatureTranslation {
+  locale: string;
+  label: string;
+}
+
+export interface AcademyFeatureAdminView {
+  id: number;
+  slug: string;
+  sortOrder: number;
+  translations: AcademyFeatureTranslation[];
+}
+
+export interface NewAcademyFeature {
+  slug: string;
+  sortOrder?: number;
+  translations: AcademyFeatureTranslation[];
+}
+
+export interface AcademyFeaturePatch {
+  sortOrder?: number;
+  translations?: AcademyFeatureTranslation[];
+}
+
+const FEATURE_TRANSLATION_LOCALE_INVALID = "Una de las traducciones usa un locale desconocido.";
+const FEATURE_TRANSLATION_SAVE_FAILED =
+  "No se pudieron guardar las traducciones de la característica.";
+
+/**
+ * Obtiene todas las características registradas en la academia, ordenadas por su campo `sort_order`.
+ * Retorna las características estructuradas incluyendo un array con todas sus traducciones.
+ * Operación pensada para el catálogo administrativo.
+ *
+ * @param admin Cliente administrativo de Supabase (service-role) que bypassa las políticas RLS.
+ * @returns Promesa que resuelve a un objeto conteniendo un array de características administrativas mapeadas.
+ * @throws {AppError} Si la consulta a Supabase falla (se lanza vía throwPostgrestError con status 503).
+ */
+export async function listAcademyFeaturesAdmin(
+  admin: AppSupabaseClient,
+): Promise<{ features: AcademyFeatureAdminView[] }> {
+  const { data, error, status } = await admin
+    .from("investep_features")
+    .select("id, slug, sort_order, investep_feature_translations(locale, label)")
+    .order("sort_order")
+    .returns<
+      {
+        id: number;
+        slug: string;
+        sort_order: number;
+        investep_feature_translations: { locale: string; label: string }[] | null;
+      }[]
+    >();
+  if (error) throwPostgrestError(error, "No se pudieron obtener las características.", status);
+
+  const features = (data ?? []).map((row) => ({
+    id: row.id,
+    slug: row.slug,
+    sortOrder: row.sort_order,
+    translations: (row.investep_feature_translations ?? []).map((t) => ({
+      locale: t.locale,
+      label: t.label,
+    })),
+  }));
+
+  return { features };
+}
+
+/**
+ * Obtiene los detalles de una única característica identificada por su ID con todas sus traducciones asociadas.
+ *
+ * @param admin Cliente administrativo de Supabase.
+ * @param id Identificador numérico de la característica.
+ * @returns Promesa que resuelve al detalle de la característica mapeada, o `null` si no existe.
+ * @throws {AppError} Si la consulta a Supabase falla.
+ */
+export async function getAcademyFeatureDetail(
+  admin: AppSupabaseClient,
+  id: number,
+): Promise<AcademyFeatureAdminView | null> {
+  const { data, error, status } = await admin
+    .from("investep_features")
+    .select("id, slug, sort_order, investep_feature_translations(locale, label)")
+    .eq("id", id)
+    .limit(1)
+    .returns<
+      {
+        id: number;
+        slug: string;
+        sort_order: number;
+        investep_feature_translations: { locale: string; label: string }[] | null;
+      }[]
+    >();
+  if (error) throwPostgrestError(error, "No se pudo leer la característica.", status);
+  const row = data?.[0];
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    slug: row.slug,
+    sortOrder: row.sort_order,
+    translations: (row.investep_feature_translations ?? []).map((t) => ({
+      locale: t.locale,
+      label: t.label,
+    })),
+  };
+}
+
+/**
+ * Crea una nueva característica junto con su correspondiente conjunto de traducciones localizadas.
+ * Como PostgREST no provee atomicidad multi-tabla transaccional nativa por defecto mediante su API REST:
+ * 1. Inserta la característica principal.
+ * 2. Si este insert falla debido a que el `slug` ya existe, lanza un error de conflicto (`409 CONFLICT`).
+ * 3. Posteriormente inserta todas sus traducciones.
+ * 4. Si la inserción de las traducciones falla (ej. locale inexistente en base de datos), realiza un
+ *    rollback best-effort borrando la característica principal creada y propaga el error de FK (`422 VALIDATION_ERROR`).
+ *
+ * @param admin Cliente administrativo de Supabase.
+ * @param input Datos para la nueva característica (`slug`, `sortOrder` y array de traducciones).
+ * @returns Promesa que resuelve a la característica administrativa creada.
+ * @throws {AppError} 409 Conflict si el slug está duplicado.
+ * @throws {AppError} 422 Validation Error si hay un error de FK en las traducciones (locale desconocido).
+ * @throws {AppError} 503 Service Unavailable si ocurre un error transitorio de red o de DB.
+ */
+export async function createAcademyFeature(
+  admin: AppSupabaseClient,
+  input: NewAcademyFeature,
+): Promise<AcademyFeatureAdminView> {
+  const { data, error, status } = await admin
+    .from("investep_features")
+    .insert({
+      slug: input.slug,
+      sort_order: input.sortOrder ?? 0,
+    })
+    .select("id, slug, sort_order")
+    .single<{ id: number; slug: string; sort_order: number }>();
+
+  if (error || !data) {
+    if (isUniqueViolation(error)) {
+      throw new AppError("CONFLICT", "Ya existe una característica con ese slug.", 409);
+    }
+    throwPostgrestError(error, "No se pudo crear la característica.", status);
+  }
+
+  const featureId = data.id;
+
+  async function rollback(): Promise<void> {
+    const { error: rollbackErr } = await admin
+      .from("investep_features")
+      .delete()
+      .eq("id", featureId);
+    if (rollbackErr) {
+      logError("academy_feature_rollback_failed", { featureId });
+    }
+  }
+
+  const { error: tErr, status: tStatus } = await admin.from("investep_feature_translations").insert(
+    input.translations.map((t) => ({
+      investep_feature_id: featureId,
+      locale: t.locale,
+      label: t.label,
+    })),
+  );
+
+  if (tErr) {
+    await rollback();
+    throwForeignKeyAs422(
+      tErr,
+      FEATURE_TRANSLATION_LOCALE_INVALID,
+      FEATURE_TRANSLATION_SAVE_FAILED,
+      tStatus,
+    );
+  }
+
+  return {
+    id: featureId,
+    slug: data.slug,
+    sortOrder: data.sort_order,
+    translations: input.translations,
+  };
+}
+
+/**
+ * Actualiza de forma parcial los datos escalares de una característica y reemplaza su conjunto de traducciones.
+ *
+ * Semántica de reemplazo seguro para colecciones:
+ * 1. Primero verifica existencia (404 si no existe).
+ * 2. Si viene `sortOrder` en el patch, actualiza el registro principal de la característica.
+ * 3. Si viene `translations`, se realiza un upsert de las nuevas traducciones provistas en el payload.
+ *    Esto previene borrar nada si el payload tiene locales inválidos, arrojando error 422 antes de
+ *    modificar las traducciones actuales.
+ * 4. Tras un upsert exitoso, borra todas aquellas traducciones asociadas que no figuren en el payload.
+ *
+ * @param admin Cliente administrativo de Supabase.
+ * @param id ID de la característica a actualizar.
+ * @param patch Datos parciales a actualizar (los campos `sortOrder` y `translations` son opcionales).
+ * @returns Promesa que resuelve a la vista actualizada de la característica.
+ * @throws {AppError} 404 Not Found si la característica no existe.
+ * @throws {AppError} 422 Validation Error si hay un error de FK en las traducciones.
+ */
+export async function updateAcademyFeature(
+  admin: AppSupabaseClient,
+  id: number,
+  patch: AcademyFeaturePatch,
+): Promise<AcademyFeatureAdminView> {
+  const existing = await getAcademyFeatureDetail(admin, id);
+  if (!existing) throw new AppError("NOT_FOUND", "Característica no encontrada.", 404);
+
+  const scalarPayload = {
+    ...(patch.sortOrder !== undefined && { sort_order: patch.sortOrder }),
+  };
+
+  if (Object.keys(scalarPayload).length > 0) {
+    const { error, status } = await admin
+      .from("investep_features")
+      .update(scalarPayload)
+      .eq("id", id);
+    if (error) throwPostgrestError(error, "No se pudo actualizar la característica.", status);
+  }
+
+  let translations = existing.translations;
+  if (patch.translations && patch.translations.length > 0) {
+    const { error, status } = await admin.from("investep_feature_translations").upsert(
+      patch.translations.map((t) => ({
+        investep_feature_id: id,
+        locale: t.locale,
+        label: t.label,
+      })),
+      { onConflict: "investep_feature_id,locale" },
+    );
+    if (error) {
+      throwForeignKeyAs422(
+        error,
+        FEATURE_TRANSLATION_LOCALE_INVALID,
+        FEATURE_TRANSLATION_SAVE_FAILED,
+        status,
+      );
+    }
+
+    const keep = new Set(patch.translations.map((t) => t.locale));
+    const localesToRemove = existing.translations
+      .map((t) => t.locale)
+      .filter((locale) => !keep.has(locale));
+
+    if (localesToRemove.length > 0) {
+      const { error: delErr, status: delStatus } = await admin
+        .from("investep_feature_translations")
+        .delete()
+        .eq("investep_feature_id", id)
+        .in("locale", localesToRemove);
+      if (delErr) throwPostgrestError(delErr, FEATURE_TRANSLATION_SAVE_FAILED, delStatus);
+    }
+    translations = patch.translations;
+  }
+
+  return {
+    id: existing.id,
+    slug: existing.slug,
+    sortOrder: patch.sortOrder ?? existing.sortOrder,
+    translations,
+  };
+}
+
+/**
+ * Elimina una característica por su identificador único ID.
+ * Las traducciones asociadas y relaciones de planes caen automáticamente por `ON DELETE CASCADE`.
+ *
+ * @param admin Cliente administrativo de Supabase.
+ * @param id Identificador numérico de la característica.
+ * @throws {AppError} 404 Not Found si la característica no existe.
+ */
+export async function deleteAcademyFeature(admin: AppSupabaseClient, id: number): Promise<void> {
+  const { data, error, status } = await admin
+    .from("investep_features")
+    .delete()
+    .eq("id", id)
+    .select("id");
+  if (error) {
+    throwPostgrestError(error, "No se pudo borrar la característica.", status);
+  }
+  if ((data?.length ?? 0) === 0)
+    throw new AppError("NOT_FOUND", "Característica no encontrada.", 404);
+}

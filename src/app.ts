@@ -47,7 +47,7 @@ export function createApp() {
   // --- Admin: CRUD de catálogos, protegido por `requireAdmin` (AGENTS.md §5/§6) ---
   app.route("/admin/brokers", adminBrokersRouter);
   app.route("/admin/plans", adminPlansRouter);
-  app.route("/admin/academy/plans", adminAcademyRouter);
+  app.route("/admin/academy", adminAcademyRouter);
 
   // Esquema de seguridad para el spec OpenAPI (Bearer JWT de Supabase Auth).
   app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
