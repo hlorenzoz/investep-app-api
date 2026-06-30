@@ -85,6 +85,7 @@ secrets-production:
 # Crea el primer usuario admin usando BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD del .dev.vars
 create-first-user:
     bun run scripts/provision-user.ts
+    bun run scripts/set-admin.ts
 
 # Crea o resetea un usuario. PASSWORD vacío → el servidor genera la contraseña.
 create-user EMAIL PASSWORD="":
