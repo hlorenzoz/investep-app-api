@@ -68,9 +68,13 @@ deploy-staging:
 deploy-production:
     bunx wrangler deploy --env production
 
-# Aplicar las migraciones al proyecto Supabase ENLAZADO (corré `supabase link --project-ref <ref>` antes)
+# Aplicar las migraciones al proyecto Supabase ENLAZADO (corré `just db-link` antes)
 db-push:
-    supabase db push
+    bunx supabase db push
+
+# Recrear la base de datos local (Docker) desde cero corriendo todas las migraciones
+db-reset:
+    bunx supabase db reset
 
 # Cargar TODO como secrets en Workers desde el .dev.vars.<env> (todo-secret).
 # El mismo archivo sirve para `wrangler dev --env` (local) y para esto (deploy).
