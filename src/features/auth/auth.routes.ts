@@ -7,6 +7,7 @@ export const AuthUserSchema = z
       id: z.string().openapi({ example: "8f3b1d2e-0a4c-4e6f-9b2a-1c2d3e4f5a6b" }),
       email: z.string().openapi({ example: "user@example.com" }),
       mustResetPassword: z.boolean().openapi({ example: false }),
+      role: z.enum(["admin", "manager", "user"]).openapi({ example: "user" }),
     }),
   })
   .openapi("AuthUser");

@@ -11,6 +11,7 @@ import { capitalRouter } from "./features/capital";
 import { healthRouter } from "./features/health/health.router";
 import { adminPlansRouter, plansRouter } from "./features/plans";
 import { portfolioRouter } from "./features/portfolio";
+import { adminUsersRouter } from "./features/users";
 import { openApiConfig, validationHook } from "./lib/openapi";
 import { docsGuard } from "./middleware/docs-guard";
 import { errorHandler } from "./middleware/error-handler";
@@ -48,6 +49,7 @@ export function createApp() {
   app.route("/admin/brokers", adminBrokersRouter);
   app.route("/admin/plans", adminPlansRouter);
   app.route("/admin/academy", adminAcademyRouter);
+  app.route("/admin/users", adminUsersRouter);
 
   // Esquema de seguridad para el spec OpenAPI (Bearer JWT de Supabase Auth).
   app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {

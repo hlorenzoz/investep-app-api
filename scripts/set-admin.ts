@@ -100,7 +100,11 @@ try {
 
   const { error } = await admin.auth.admin.updateUserById(user.id, {
     // `is_admin` en app_metadata (server-side only). `false` lo deja explícito (revoca).
-    app_metadata: { [IS_ADMIN_KEY]: !revoke },
+    app_metadata: {
+      [IS_ADMIN_KEY]: !revoke,
+      role: revoke ? "user" : "admin",
+      is_manager: false,
+    },
   });
   if (error) {
     console.error(`No se pudo actualizar al usuario ${user.id}: ${error.message}`);

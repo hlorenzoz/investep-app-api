@@ -70,11 +70,48 @@ describe("GET /auth/me", () => {
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      user: { id: string; email: string; mustResetPassword: boolean };
+      user: { id: string; email: string; mustResetPassword: boolean; role: string };
     };
     expect(body.user.id).toBe("uid-123");
     expect(body.user.email).toBe("user@example.com");
     expect(body.user.mustResetPassword).toBe(false);
+    expect(body.user.role).toBe("user"); // Rol por defecto
+  });
+
+  it("resuelve role: admin cuando app_metadata tiene is_admin: true", async () => {
+    mockGoTrueUser({
+      id: "uid-123-admin",
+      email: "admin@example.com",
+      app_metadata: { is_admin: true },
+    });
+
+    const res = await createApp().request(
+      "/auth/me",
+      { headers: { Authorization: "Bearer valid" } },
+      ENV,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { user: { role: string } };
+    expect(body.user.role).toBe("admin");
+  });
+
+  it("resuelve role: manager cuando app_metadata tiene role: manager", async () => {
+    mockGoTrueUser({
+      id: "uid-123-manager",
+      email: "manager@example.com",
+      app_metadata: { role: "manager" },
+    });
+
+    const res = await createApp().request(
+      "/auth/me",
+      { headers: { Authorization: "Bearer valid" } },
+      ENV,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { user: { role: string } };
+    expect(body.user.role).toBe("manager");
   });
 
   it("expone mustResetPassword: true cuando app_metadata lo indica", async () => {

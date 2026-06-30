@@ -19,6 +19,8 @@ const FAKE_USER: AuthUser = {
   email: "user@example.com",
   mustResetPassword: false,
   isAdmin: false,
+  isManager: false,
+  role: "user",
 };
 
 /** App Hono mínima para ejercitar el middleware con un verificador inyectado. */

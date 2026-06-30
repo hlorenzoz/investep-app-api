@@ -100,6 +100,10 @@ token EMAIL="" PASSWORD="":
 set-admin *ARGS:
     bun run scripts/set-admin.ts {{ARGS}}
 
+# Asigna un usuario como administrador a partir de su correo electrónico.
+make-admin EMAIL:
+    bun run scripts/set-admin.ts {{EMAIL}}
+
 # One-shot: migra must_reset_password de user_metadata → app_metadata (control de seguridad).
 # Correr ANTES de desplegar el código que lee app_metadata. ENV opcional (staging/production).
 migrate-must-reset ENV="":

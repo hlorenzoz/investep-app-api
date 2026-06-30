@@ -60,15 +60,24 @@ export async function verifySupabaseToken(env: Env, token: string): Promise<Auth
     return null;
   }
 
-  // El flag vive en `app_metadata` (solo escribible server-side con la service-role key),
-  // NO en `user_metadata` (que el propio usuario puede escribir desde el browser). Es un
-  // control de seguridad: leerlo de user_metadata permitiría apagarlo sin cambiar la clave.
   const appMetadata = (data.user.app_metadata ?? {}) as Record<string, unknown>;
+  const rawRole = appMetadata.role as string | undefined;
+  const role =
+    rawRole === "admin" || rawRole === "manager" || rawRole === "user"
+      ? rawRole
+      : appMetadata[IS_ADMIN_KEY] === true
+        ? "admin"
+        : appMetadata.is_manager === true
+          ? "manager"
+          : "user";
+
   return {
     id: data.user.id,
     email: data.user.email,
     mustResetPassword: appMetadata[MUST_RESET_PASSWORD_KEY] === true,
-    isAdmin: appMetadata[IS_ADMIN_KEY] === true,
+    isAdmin: role === "admin",
+    isManager: role === "manager",
+    role,
   };
 }
 

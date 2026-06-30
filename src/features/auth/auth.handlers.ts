@@ -9,10 +9,8 @@ import { changePassword } from "./change-password";
  * así que el handler solo lo proyecta a la respuesta.
  */
 export const meHandler: RouteHandler<MeRoute, AuthedBindings> = (c) => {
-  const { id, email, mustResetPassword } = c.get("user");
-  // Proyección explícita: `isAdmin` es un control interno (lo consume `requireAdmin`),
-  // NO parte del contrato público de `/auth/me`. No se filtra al cliente (§5).
-  return c.json({ user: { id, email, mustResetPassword } }, 200);
+  const { id, email, mustResetPassword, role } = c.get("user");
+  return c.json({ user: { id, email, mustResetPassword, role } }, 200);
 };
 
 /**
@@ -29,7 +27,13 @@ export const changePasswordHandler: RouteHandler<ChangePasswordRoute, AuthedBind
 
   const result = await changePassword(
     { admin: createSupabaseAdminClient(c.env) },
-    { userId: user.id, email: user.email, newPassword, accessToken: c.get("accessToken") },
+    {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      newPassword,
+      accessToken: c.get("accessToken"),
+    },
   );
 
   return c.json(result, 200);

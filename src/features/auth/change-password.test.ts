@@ -42,6 +42,7 @@ type AdminDep = Parameters<typeof changePassword>[0]["admin"];
 const BASE_INPUT = {
   userId: "uid-1",
   email: "u@example.com",
+  role: "user" as const,
   newPassword: "a".repeat(MIN_PASSWORD_LENGTH),
   accessToken: "the-access-token",
 };
@@ -101,7 +102,12 @@ describe("changePassword", () => {
     // Revocación global con el access token del request (no userId).
     expect(signOutCall).toEqual([BASE_INPUT.accessToken, "global"]);
 
-    expect(result.user).toEqual({ id: "uid-1", email: "u@example.com", mustResetPassword: false });
+    expect(result.user).toEqual({
+      id: "uid-1",
+      email: "u@example.com",
+      mustResetPassword: false,
+      role: "user",
+    });
   });
 
   it("error transitorio de Supabase (status 500) → 503 SERVICE_UNAVAILABLE y NO revoca sesiones", async () => {

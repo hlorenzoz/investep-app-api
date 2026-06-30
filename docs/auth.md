@@ -28,6 +28,16 @@ Every provisioned user gets `app_metadata.must_reset_password: true` set at crea
 3. **Cleared**: ONLY by `POST /auth/change-password` (server-side, with the admin client). The frontend must NOT clear it via `auth.updateUser` — that path no longer has any effect, since the flag is not in `user_metadata`.
 4. **Enforcement**: up to the frontend — the API does not block requests based on this flag, it only sets/reads/clears it.
 
+### Role Management (admin, manager, user)
+
+User roles are managed securely in `app_metadata.role` (which can be `"admin"`, `"manager"`, or `"user"`).
+- **Security**: Like the `must_reset_password` flag, roles live in `app_metadata` (via `role`, `is_admin`, and `is_manager` flags) and are only writable server-side using the `service_role` key. This prevents users from self-assigning privileges from the browser client.
+- **Access Control**:
+  - `admin`: Can perform CRUD operations on users, subscription plans, and brokers.
+  - `manager`: Has elevated operational access, but is restricted from modifying users or core configuration tables.
+  - `user`: Default role. Only has read access to their own data.
+- **Client UI (Flutter/SvelteKit)**: The role is exposed in `/auth/me` as `role` to allow the client to dynamically show/hide components based on user authorization.
+
 ### `POST /auth/change-password`
 
 The only legitimate way to change the password and clear the flag. Protected by `requireAuth`.

@@ -12,6 +12,10 @@ export interface AuthUser {
   mustResetPassword: boolean;
   /** `app_metadata.is_admin` (control de seguridad server-side): habilita el CRUD de catálogos vía `requireAdmin`. */
   isAdmin: boolean;
+  /** `app_metadata.is_manager` (control de seguridad server-side): habilita control de acceso a nivel manager. */
+  isManager: boolean;
+  /** Rol del usuario en formato de string estructurado. */
+  role: "admin" | "manager" | "user";
 }
 
 /**

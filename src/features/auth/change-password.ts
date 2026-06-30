@@ -28,6 +28,8 @@ export interface ChangePasswordInput {
   userId: string;
   /** Email del usuario autenticado, para componer la respuesta sin re-leer Supabase. */
   email: string;
+  /** Rol del usuario autenticado. */
+  role: "admin" | "manager" | "user";
   /** Nueva contraseña elegida por el usuario. */
   newPassword: string;
   /** Access token del request; se usa para revocar globalmente las sesiones. */
@@ -40,6 +42,7 @@ export interface ChangePasswordResult {
     id: string;
     email: string;
     mustResetPassword: false;
+    role: "admin" | "manager" | "user";
   };
 }
 
@@ -100,6 +103,7 @@ export async function changePassword(
       id: input.userId,
       email: input.email,
       mustResetPassword: false,
+      role: input.role,
     },
   };
 }
