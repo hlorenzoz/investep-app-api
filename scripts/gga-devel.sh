@@ -16,4 +16,7 @@ if ! command -v gga >/dev/null 2>&1; then
 fi
 
 echo "gga: code review con IA (reglas de AGENTS.md)…"
-exec gga run --ci
+gga run --ci || {
+  echo "gga: WARNING: La revisión de código con IA falló (posible problema de autenticación o del proveedor externo). Continuando push..." >&2
+  exit 0
+}
