@@ -72,10 +72,6 @@ deploy-production:
 db-push:
     bunx supabase db push
 
-# Recrear la base de datos local (Docker) desde cero corriendo todas las migraciones
-db-reset:
-    bunx supabase db reset
-
 # Cargar TODO como secrets en Workers desde el .dev.vars.<env> (todo-secret).
 # El mismo archivo sirve para `wrangler dev --env` (local) y para esto (deploy).
 secrets-staging:
