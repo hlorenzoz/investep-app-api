@@ -562,6 +562,30 @@ describe("Academy plans (admin)", () => {
     expect(res.status).toBe(422);
   });
 
+  it("422 cuando url es malformada en creación", async () => {
+    adminOnlyFetch();
+    const res = await createApp().request(
+      "/admin/academy/plans",
+      createReq({ ...CREATE_PAYLOAD, url: "invalid-url" }),
+      ENV,
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it("422 cuando url es malformada en actualización", async () => {
+    adminOnlyFetch();
+    const res = await createApp().request(
+      "/admin/academy/plans/3",
+      {
+        method: "PATCH",
+        headers: { ...AUTH, "content-type": "application/json" },
+        body: JSON.stringify({ url: "invalid-url" }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(422);
+  });
+
   it("404 al actualizar un paquete inexistente", async () => {
     globalThis.fetch = mock(async (input: unknown) => {
       const url = String(input);
