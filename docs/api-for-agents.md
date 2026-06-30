@@ -71,8 +71,21 @@ el token; el cliente **no** habla con la base directo (eso lo hace la API con su
 > `GET /auth/me` valida el `Authorization: Bearer <token>` contra Supabase Auth y devuelve el usuario
 > autenticado. Es el endpoint que un cliente usa para **confirmar** que su JWT es válido contra la API.
 >
+| `GET` | `/capital` | Bearer | `200` CapitalView con capital, asignaciones, totalAllocated y disponible. |
+| `PUT` | `/capital` | Bearer | `200` actualiza el total de capital del usuario. |
+| `POST` | `/capital/allocations` | Bearer | `201` crea una nueva asignación a un bróker. Auto-inicializa el capital total si no existía. |
+| `PATCH` | `/capital/allocations/{id}` | Bearer | `200` edita el plan, depósito o moneda de una asignación. |
+| `DELETE` | `/capital/allocations/{id}` | Bearer | `200` elimina una asignación. |
+| `POST` | `/capital/transfers` | Bearer | `200` transfiere saldo manual para balancear cuentas (entre brókers o desde/hacia capital general). |
+
+> `POST /capital/transfers` recibe un JSON con:
+> - `fromAllocationId`: ID de origen (UUID) o la palabra `"capital"` para transferir desde el saldo libre general.
+> - `toAllocationId`: ID de destino (UUID) o la palabra `"capital"` para liberar fondos hacia el saldo libre general.
+> - `amount`: monto positivo a transferir.
+>
 > Los dominios `plans`, `portfolio` y `brokers` están **planificados** (aún stubs). A medida
 > que se implementen aparecerán automáticamente en `/openapi.json` — vuelve a leer el spec.
+
 
 ## 7. Reglas del proyecto
 

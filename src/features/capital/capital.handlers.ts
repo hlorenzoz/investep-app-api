@@ -8,6 +8,7 @@ import type {
   DeleteAllocationRoute,
   GetCapitalRoute,
   PutCapitalRoute,
+  TransferCapitalRoute,
   UpdateAllocationRoute,
 } from "./capital.routes";
 import {
@@ -15,6 +16,7 @@ import {
   deleteAllocation,
   getCapitalView,
   setCapital,
+  transferCapital,
   updateAllocation,
 } from "./capital.service";
 
@@ -60,4 +62,11 @@ export const deleteAllocationHandler: RouteHandler<DeleteAllocationRoute, Authed
   const { id } = c.req.valid("param");
   await deleteAllocation(repoFor(c.env), c.get("user").id, id);
   return c.json({ deleted: true as const }, 200);
+};
+
+export const transferCapitalHandler: RouteHandler<TransferCapitalRoute, AuthedBindings> = async (
+  c,
+) => {
+  await transferCapital(repoFor(c.env), c.get("user").id, c.req.valid("json"));
+  return c.json({ success: true as const }, 200);
 };

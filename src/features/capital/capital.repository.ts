@@ -1,3 +1,4 @@
+import { AppError } from "../../lib/errors";
 import { throwPostgrestError } from "../../lib/postgres-error";
 import type { AppSupabaseClient } from "../../lib/supabase";
 
@@ -60,6 +61,12 @@ export interface CapitalRepository {
   deleteAllocation(userId: string, id: string): Promise<boolean>;
   getPlan(planId: number): Promise<PlanRef | null>;
   getBroker(brokerId: number): Promise<BrokerRef | null>;
+  transfer(
+    userId: string,
+    fromId: string | null,
+    toId: string | null,
+    amount: number,
+  ): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -211,6 +218,30 @@ export function createSupabaseCapitalRepository(admin: AppSupabaseClient): Capit
         .maybeSingle();
       if (error) throwPostgrestError(error, "No se pudo leer el broker.", status);
       return data ? { id: data.id, slug: data.slug } : null;
+    },
+
+    async transfer(userId, fromId, toId, amount) {
+      const { error, status } = await admin.rpc("transfer_capital", {
+        p_user_id: userId,
+        p_from_id: fromId,
+        p_to_id: toId,
+        p_amount: amount,
+      });
+      if (error) {
+        if (
+          error.message.includes("insuficiente") ||
+          error.message.includes("supera") ||
+          error.message.includes("monto") ||
+          error.message.includes("iguales") ||
+          error.message.includes("capital")
+        ) {
+          throw new AppError("CONFLICT", error.message, 409);
+        }
+        if (error.message.includes("no existe") || error.message.includes("no tiene capital")) {
+          throw new AppError("NOT_FOUND", error.message, 404);
+        }
+        throwPostgrestError(error, "No se pudo realizar la transferencia.", status);
+      }
     },
   };
 }

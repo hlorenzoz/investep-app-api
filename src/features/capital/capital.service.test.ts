@@ -12,6 +12,7 @@ import {
   deleteAllocation,
   getCapitalView,
   setCapital,
+  transferCapital,
   updateAllocation,
 } from "./capital.service";
 
@@ -100,6 +101,75 @@ function makeRepo(opts?: {
     },
     async getBroker(brokerId) {
       return brokers.find((b) => b.id === brokerId) ?? null;
+    },
+    async transfer(userId, fromId, toId, amount) {
+      if (amount <= 0) {
+        throw new AppError("CONFLICT", "El monto a transferir debe ser mayor a cero.", 409);
+      }
+      if (fromId === toId) {
+        throw new AppError(
+          "CONFLICT",
+          "Las cuentas de origen y destino no pueden ser iguales.",
+          409,
+        );
+      }
+      if (fromId === null && toId === null) {
+        throw new AppError("CONFLICT", "No se puede transferir de capital a capital.", 409);
+      }
+
+      if (fromId === null) {
+        const cap = capital.get(userId);
+        if (!cap) {
+          throw new AppError("NOT_FOUND", "El usuario no tiene capital configurado.", 404);
+        }
+        const userAllocs = allocations.filter((a) => a.userId === userId);
+        const allocated = userAllocs.reduce((s, a) => s + a.row.initialDeposit, 0);
+        const available = cap.totalCapital - allocated;
+        if (available < amount) {
+          throw new AppError(
+            "CONFLICT",
+            `Capital disponible insuficiente (disponible: ${available}, requerido: ${amount})`,
+            409,
+          );
+        }
+
+        const dest = allocations.find((a) => a.userId === userId && a.row.id === toId);
+        if (!dest) {
+          throw new AppError("NOT_FOUND", "La asignación de destino no existe.", 404);
+        }
+        dest.row.initialDeposit += amount;
+      } else if (toId === null) {
+        const src = allocations.find((a) => a.userId === userId && a.row.id === fromId);
+        if (!src) {
+          throw new AppError("NOT_FOUND", "La asignación de origen no existe.", 404);
+        }
+        if (src.row.initialDeposit < amount) {
+          throw new AppError(
+            "CONFLICT",
+            `Saldo insuficiente en la cuenta de origen (disponible: ${src.row.initialDeposit}, requerido: ${amount})`,
+            409,
+          );
+        }
+        src.row.initialDeposit -= amount;
+      } else {
+        const src = allocations.find((a) => a.userId === userId && a.row.id === fromId);
+        if (!src) {
+          throw new AppError("NOT_FOUND", "La asignación de origen no existe.", 404);
+        }
+        if (src.row.initialDeposit < amount) {
+          throw new AppError(
+            "CONFLICT",
+            `Saldo insuficiente en la cuenta de origen (disponible: ${src.row.initialDeposit}, requerido: ${amount})`,
+            409,
+          );
+        }
+        const dest = allocations.find((a) => a.userId === userId && a.row.id === toId);
+        if (!dest) {
+          throw new AppError("NOT_FOUND", "La asignación de destino no existe.", 404);
+        }
+        src.row.initialDeposit -= amount;
+        dest.row.initialDeposit += amount;
+      }
     },
   };
 }
@@ -216,10 +286,19 @@ describe("createAllocation", () => {
     expect(result.currency).toBe("USD");
   });
 
-  it("409 sin capital seteado", async () => {
-    await expect(
-      createAllocation(makeRepo(), U, { brokerId: 10, investmentPlanId: 1, initialDeposit: 100 }),
-    ).rejects.toMatchObject({ code: "CONFLICT", status: 409 });
+  it("inicializa el capital automáticamente si no está configurado al crear la primera asignación", async () => {
+    const repo = makeRepo();
+    const result = await createAllocation(repo, U, {
+      brokerId: 10,
+      investmentPlanId: 1,
+      initialDeposit: 4000,
+      currency: "USD",
+    });
+    expect(result.initialDeposit).toBe(4000);
+    const cap = await repo.getCapital(U);
+    expect(cap).not.toBeNull();
+    expect(cap?.totalCapital).toBe(4000);
+    expect(cap?.currency).toBe("USD");
   });
 
   it("404 si el plan no existe", async () => {
@@ -447,5 +526,162 @@ describe("getCapitalView — invariantes de cálculo (property-based determinist
       expect(view.available).toBeCloseTo(expectedCapital - expectedTotal, 6);
       expect(view.totalAllocated + view.available).toBeCloseTo(expectedCapital, 6);
     }
+  });
+});
+
+describe("transferCapital", () => {
+  it("transfiere capital de broker a broker exitosamente", async () => {
+    const repo = makeRepo({
+      capital: { [U]: { totalCapital: 5000, currency: "USD" } },
+      allocations: [
+        alloc(U, { id: "a1", initialDeposit: 3000 }),
+        alloc(U, { id: "a2", brokerId: 11, initialDeposit: 1000 }),
+      ],
+    });
+    await transferCapital(repo, U, {
+      fromAllocationId: "a1",
+      toAllocationId: "a2",
+      amount: 1000,
+    });
+    const a1 = await repo.getAllocation(U, "a1");
+    const a2 = await repo.getAllocation(U, "a2");
+    expect(a1?.initialDeposit).toBe(2000);
+    expect(a2?.initialDeposit).toBe(2000);
+  });
+
+  it("transfiere capital de disponible (capital) a broker exitosamente", async () => {
+    const repo = makeRepo({
+      capital: { [U]: { totalCapital: 5000, currency: "USD" } },
+      allocations: [alloc(U, { id: "a1", initialDeposit: 3000 })],
+    });
+    await transferCapital(repo, U, {
+      fromAllocationId: "capital",
+      toAllocationId: "a1",
+      amount: 1000,
+    });
+    const a1 = await repo.getAllocation(U, "a1");
+    expect(a1?.initialDeposit).toBe(4000);
+    const view = await getCapitalView(repo, U);
+    expect(view.available).toBe(1000);
+  });
+
+  it("transfiere capital de broker a disponible (capital) exitosamente", async () => {
+    const repo = makeRepo({
+      capital: { [U]: { totalCapital: 5000, currency: "USD" } },
+      allocations: [alloc(U, { id: "a1", initialDeposit: 3000 })],
+    });
+    await transferCapital(repo, U, {
+      fromAllocationId: "a1",
+      toAllocationId: "capital",
+      amount: 1000,
+    });
+    const a1 = await repo.getAllocation(U, "a1");
+    expect(a1?.initialDeposit).toBe(2000);
+    const view = await getCapitalView(repo, U);
+    expect(view.available).toBe(3000);
+  });
+
+  it("falla si origen y destino son iguales", async () => {
+    const repo = makeRepo({
+      capital: { [U]: { totalCapital: 5000, currency: "USD" } },
+      allocations: [alloc(U, { id: "a1", initialDeposit: 3000 })],
+    });
+    await expect(
+      transferCapital(repo, U, {
+        fromAllocationId: "a1",
+        toAllocationId: "a1",
+        amount: 500,
+      }),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      status: 422,
+    });
+  });
+
+  it("falla si ambos son capital", async () => {
+    const repo = makeRepo({
+      capital: { [U]: { totalCapital: 5000, currency: "USD" } },
+    });
+    await expect(
+      transferCapital(repo, U, {
+        fromAllocationId: "capital",
+        toAllocationId: "capital",
+        amount: 500,
+      }),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      status: 422,
+    });
+  });
+
+  it("falla si la cuenta de origen tiene saldo insuficiente", async () => {
+    const repo = makeRepo({
+      capital: { [U]: { totalCapital: 5000, currency: "USD" } },
+      allocations: [
+        alloc(U, { id: "a1", initialDeposit: 1000 }),
+        alloc(U, { id: "a2", brokerId: 11, initialDeposit: 1000 }),
+      ],
+    });
+    await expect(
+      transferCapital(repo, U, {
+        fromAllocationId: "a1",
+        toAllocationId: "a2",
+        amount: 1500,
+      }),
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      status: 409,
+    });
+  });
+
+  it("falla si el capital disponible es insuficiente", async () => {
+    const repo = makeRepo({
+      capital: { [U]: { totalCapital: 5000, currency: "USD" } },
+      allocations: [alloc(U, { id: "a1", initialDeposit: 4500 })],
+    });
+    await expect(
+      transferCapital(repo, U, {
+        fromAllocationId: "capital",
+        toAllocationId: "a1",
+        amount: 1000,
+      }),
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      status: 409,
+    });
+  });
+
+  it("falla si la cuenta de origen no existe", async () => {
+    const repo = makeRepo({
+      capital: { [U]: { totalCapital: 5000, currency: "USD" } },
+      allocations: [alloc(U, { id: "a1", initialDeposit: 1000 })],
+    });
+    await expect(
+      transferCapital(repo, U, {
+        fromAllocationId: "ghost",
+        toAllocationId: "a1",
+        amount: 500,
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      status: 404,
+    });
+  });
+
+  it("falla si la cuenta de destino no existe", async () => {
+    const repo = makeRepo({
+      capital: { [U]: { totalCapital: 5000, currency: "USD" } },
+      allocations: [alloc(U, { id: "a1", initialDeposit: 1000 })],
+    });
+    await expect(
+      transferCapital(repo, U, {
+        fromAllocationId: "a1",
+        toAllocationId: "ghost",
+        amount: 500,
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      status: 404,
+    });
   });
 });

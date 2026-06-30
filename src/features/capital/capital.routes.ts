@@ -178,3 +178,61 @@ export const deleteAllocationRoute = createRoute({
   },
 });
 export type DeleteAllocationRoute = typeof deleteAllocationRoute;
+
+// --- POST /capital/transfers ---
+const AllocationOrCapitalSchema = z.union([z.string().uuid(), z.literal("capital")]);
+
+export const TransferCapitalRequestSchema = z
+  .object({
+    fromAllocationId: AllocationOrCapitalSchema.openapi({
+      description:
+        "ID de la asignación de origen (UUID) o la palabra 'capital' para transferir desde el saldo libre general.",
+      example: "capital",
+    }),
+    toAllocationId: AllocationOrCapitalSchema.openapi({
+      description:
+        "ID de la asignación de destino (UUID) o la palabra 'capital' para liberar fondos hacia el saldo libre general.",
+      example: "8f3b1d2e-0a4c-4e6f-9b2a-1c2d3e4f5a6b",
+    }),
+    amount: z.number().positive().openapi({
+      description: "Monto a transferir.",
+      example: 500,
+    }),
+  })
+  .openapi("TransferCapitalRequest");
+
+export const transferCapitalRoute = createRoute({
+  method: "post",
+  path: "/transfers",
+  tags: ["Capital"],
+  summary: "Transferir saldo entre cuentas o capital general",
+  description:
+    "Transfiere saldo de forma manual para balancear las cuentas. Permite mover fondos entre dos asignaciones de broker, o desde/hacia el capital general disponible.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: TransferCapitalRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({ success: z.literal(true) }),
+        },
+      },
+      description: "Transferencia realizada con éxito.",
+    },
+    401: jsonErrorResponse("Falta o es inválido el token."),
+    404: jsonErrorResponse("Asignación de origen/destino inexistente o no pertenece al usuario."),
+    409: jsonErrorResponse(
+      "Monto inválido, cuentas iguales, o saldo/capital disponible insuficiente.",
+    ),
+    422: jsonErrorResponse("Cuerpo de petición malformado (Zod)."),
+  },
+});
+export type TransferCapitalRoute = typeof transferCapitalRoute;

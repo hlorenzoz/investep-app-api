@@ -7,6 +7,7 @@ import {
   deleteAllocationHandler,
   getCapitalHandler,
   putCapitalHandler,
+  transferCapitalHandler,
   updateAllocationHandler,
 } from "./capital.handlers";
 import {
@@ -14,6 +15,7 @@ import {
   deleteAllocationRoute,
   getCapitalRoute,
   putCapitalRoute,
+  transferCapitalRoute,
   updateAllocationRoute,
 } from "./capital.routes";
 
@@ -32,4 +34,5 @@ capitalRouter
   .openapi(putCapitalRoute, putCapitalHandler)
   .openapi(createAllocationRoute, createAllocationHandler)
   .openapi(updateAllocationRoute, updateAllocationHandler)
-  .openapi(deleteAllocationRoute, deleteAllocationHandler);
+  .openapi(deleteAllocationRoute, deleteAllocationHandler)
+  .openapi(transferCapitalRoute, transferCapitalHandler);

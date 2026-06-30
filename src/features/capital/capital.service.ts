@@ -79,11 +79,6 @@ export async function createAllocation(
   userId: string,
   input: CreateAllocationInput,
 ): Promise<AllocationRow> {
-  const capital = await repo.getCapital(userId);
-  if (!capital) {
-    throw new AppError("CONFLICT", "Definí tu capital antes de asignar a un broker.", 409);
-  }
-
   const plan = await repo.getPlan(input.investmentPlanId);
   if (!plan) {
     throw new AppError("NOT_FOUND", "El plan indicado no existe.", 404);
@@ -94,7 +89,16 @@ export async function createAllocation(
     throw new AppError("NOT_FOUND", "El broker indicado no existe.", 404);
   }
 
-  const currency = input.currency ?? capital.currency;
+  let capital = await repo.getCapital(userId);
+  const currency = input.currency ?? capital?.currency ?? "USD";
+
+  if (!capital) {
+    capital = await repo.upsertCapital(userId, {
+      totalCapital: input.initialDeposit,
+      currency,
+    });
+  }
+
   if (currency !== capital.currency) {
     throw new AppError("VALIDATION_ERROR", "La moneda debe coincidir con la del capital.", 422);
   }
@@ -183,4 +187,33 @@ export async function deleteAllocation(
   if (!deleted) {
     throw new AppError("NOT_FOUND", "Asignación no encontrada.", 404);
   }
+}
+
+export interface TransferCapitalInput {
+  fromAllocationId: string | "capital";
+  toAllocationId: string | "capital";
+  amount: number;
+}
+
+/** Transfiere capital de forma manual entre asignaciones o capital general. */
+export async function transferCapital(
+  repo: CapitalRepository,
+  userId: string,
+  input: TransferCapitalInput,
+): Promise<void> {
+  if (input.fromAllocationId === input.toAllocationId) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      "Las cuentas de origen y destino no pueden ser iguales.",
+      422,
+    );
+  }
+  if (input.fromAllocationId === "capital" && input.toAllocationId === "capital") {
+    throw new AppError("VALIDATION_ERROR", "No se puede transferir de capital a capital.", 422);
+  }
+
+  const fromId = input.fromAllocationId === "capital" ? null : input.fromAllocationId;
+  const toId = input.toAllocationId === "capital" ? null : input.toAllocationId;
+
+  await repo.transfer(userId, fromId, toId, input.amount);
 }

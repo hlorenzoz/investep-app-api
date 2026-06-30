@@ -541,7 +541,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      transfer_capital: {
+        Args: {
+          p_user_id: string
+          p_from_id: string | null
+          p_to_id: string | null
+          p_amount: number
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

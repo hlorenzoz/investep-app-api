@@ -60,6 +60,7 @@ interface Cfg {
   deleted?: { id: string }[];
   errorOn?: string;
   errorStatus?: number;
+  errorMessage?: string;
 }
 
 /** Mock de fetch que enruta auth + PostgREST por tabla/método/filtro. */
@@ -72,7 +73,13 @@ function mockSupabase(cfg: Cfg = {}) {
       return json({ id: "user-1", email: "u@example.com", user_metadata: {} });
     }
     if (cfg.errorOn && url.includes(cfg.errorOn)) {
-      return json({ message: "boom", code: "", details: "", hint: "" }, cfg.errorStatus ?? 500);
+      return json(
+        { message: cfg.errorMessage ?? "boom", code: "", details: "", hint: "" },
+        cfg.errorStatus ?? 500,
+      );
+    }
+    if (url.includes("/rpc/transfer_capital")) {
+      return json(null);
     }
     if (url.includes("/user_capital")) {
       if (method === "POST") {
@@ -343,5 +350,85 @@ describe("capital endpoints", () => {
 
     expect(many).toBe(one); // independiente de N → no hay N+1
     expect(one).toBe(2); // getCapital + listAllocations
+  });
+
+  it("POST /capital/transfers happy → 200", async () => {
+    mockSupabase({});
+    const res = await createApp().request(
+      "/capital/transfers",
+      {
+        ...JSON_AUTH,
+        method: "POST",
+        body: JSON.stringify({
+          fromAllocationId: "capital",
+          toAllocationId: UUID,
+          amount: 500,
+        }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { success: boolean };
+    expect(body.success).toBe(true);
+  });
+
+  it("POST /capital/transfers con origen y destino iguales → 422 (Zod/service)", async () => {
+    mockSupabase({});
+    const res = await createApp().request(
+      "/capital/transfers",
+      {
+        ...JSON_AUTH,
+        method: "POST",
+        body: JSON.stringify({
+          fromAllocationId: "capital",
+          toAllocationId: "capital",
+          amount: 500,
+        }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it("POST /capital/transfers con monto negativo → 422 (Zod)", async () => {
+    mockSupabase({});
+    const res = await createApp().request(
+      "/capital/transfers",
+      {
+        ...JSON_AUTH,
+        method: "POST",
+        body: JSON.stringify({
+          fromAllocationId: "capital",
+          toAllocationId: UUID,
+          amount: -100,
+        }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it("POST /capital/transfers con error de saldo insuficiente → 409", async () => {
+    mockSupabase({
+      errorOn: "/rpc/transfer_capital",
+      errorStatus: 400, // PostgREST lanza 400 en raise exception
+      errorMessage: "Saldo insuficiente en la cuenta de origen",
+    });
+    const res = await createApp().request(
+      "/capital/transfers",
+      {
+        ...JSON_AUTH,
+        method: "POST",
+        body: JSON.stringify({
+          fromAllocationId: "capital",
+          toAllocationId: UUID,
+          amount: 500,
+        }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: { message: string } };
+    expect(body.error.message).toContain("Saldo insuficiente");
   });
 });
