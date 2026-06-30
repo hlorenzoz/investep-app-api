@@ -388,6 +388,7 @@ export type Database = {
           slug: string
           sort_order: number
           updated_at: string
+          url: string | null
         }
         Insert: {
           created_at?: string
@@ -399,6 +400,7 @@ export type Database = {
           slug: string
           sort_order?: number
           updated_at?: string
+          url?: string | null
         }
         Update: {
           created_at?: string
@@ -410,6 +412,7 @@ export type Database = {
           slug?: string
           sort_order?: number
           updated_at?: string
+          url?: string | null
         }
         Relationships: []
       }
@@ -543,10 +546,10 @@ export type Database = {
     Functions: {
       transfer_capital: {
         Args: {
-          p_user_id: string
-          p_from_id: string | null
-          p_to_id: string | null
           p_amount: number
+          p_from_id: string
+          p_to_id: string
+          p_user_id: string
         }
         Returns: undefined
       }

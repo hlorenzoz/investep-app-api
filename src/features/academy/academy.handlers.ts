@@ -54,6 +54,7 @@ export const createAcademyPlanHandler: RouteHandler<
   const body = c.req.valid("json");
   const plan = await createAcademyPlan(createSupabaseAdminClient(c.env), {
     slug: body.slug,
+    url: body.url,
     priceRegular: body.priceRegular,
     priceOffer: body.priceOffer ?? null,
     currency: body.currency,
@@ -77,6 +78,7 @@ export const updateAcademyPlanHandler: RouteHandler<
   const { id } = c.req.valid("param");
   const body = c.req.valid("json");
   const plan = await updateAcademyPlan(createSupabaseAdminClient(c.env), id, {
+    url: body.url,
     priceRegular: body.priceRegular,
     priceOffer: body.priceOffer,
     currency: body.currency,

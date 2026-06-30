@@ -46,6 +46,7 @@ export const AcademyPlanSchema = z
     slug: z.string().openapi({ example: "gold" }),
     name: z.string().nullable().openapi({ example: "Gold" }),
     subtitle: z.string().nullable().openapi({ example: "Para traders activos" }),
+    url: z.string().nullable().openapi({ example: "https://checkout.stripe.com/pay/cs_live_123" }),
     priceRegular: z.number().openapi({ example: 199.0 }),
     priceOffer: z.number().nullable().openapi({ example: 149.0 }),
     currency: z.string().openapi({ example: "USD" }),
@@ -74,6 +75,7 @@ export const AcademyPlanAdminSchema = z
   .object({
     id: z.number().openapi({ example: 3 }),
     slug: z.string().openapi({ example: "gold" }),
+    url: z.string().nullable().openapi({ example: "https://checkout.stripe.com/pay/cs_live_123" }),
     priceRegular: z.number().openapi({ example: 199.0 }),
     priceOffer: z.number().nullable().openapi({ example: 149.0 }),
     currency: z.string().openapi({ example: "USD" }),
@@ -96,6 +98,12 @@ const AcademyPlansAdminResponseSchema = z
 export const CreateAcademyPlanSchema = z
   .object({
     slug: SlugSchema,
+    url: z
+      .string()
+      .url()
+      .nullable()
+      .optional()
+      .openapi({ description: "URL externa de suscripción del plan." }),
     priceRegular: PriceSchema.openapi({ example: 199.0 }),
     priceOffer: PriceSchema.nullable().optional().openapi({ example: 149.0 }),
     currency: CurrencySchema.optional().openapi({ description: "Default 'USD' si se omite." }),
@@ -116,6 +124,12 @@ export const CreateAcademyPlanSchema = z
 /** Cuerpo de actualización: PATCH parcial. `slug` NO es editable (identificador estable). */
 export const UpdateAcademyPlanSchema = z
   .object({
+    url: z
+      .string()
+      .url()
+      .nullable()
+      .optional()
+      .openapi({ description: "URL externa de suscripción del plan." }),
     priceRegular: PriceSchema.optional(),
     priceOffer: PriceSchema.nullable().optional(),
     currency: CurrencySchema.optional(),

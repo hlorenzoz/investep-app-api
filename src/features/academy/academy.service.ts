@@ -25,6 +25,7 @@ export interface AcademyPlanView {
   slug: string;
   name: string | null;
   subtitle: string | null;
+  url: string | null;
   priceRegular: number;
   priceOffer: number | null;
   currency: string;
@@ -39,6 +40,7 @@ export interface ListAcademyPlansOptions {
 interface AcademyPlanClientRow {
   id: number;
   slug: string;
+  url: string | null;
   // PostgREST devuelve numeric como string; coercemos al mapear.
   price_regular: number | string;
   price_offer: number | string | null;
@@ -58,7 +60,7 @@ interface AcademyPlanClientRow {
 }
 
 const CLIENT_SELECT =
-  "id, slug, price_regular, price_offer, currency, sort_order, " +
+  "id, slug, url, price_regular, price_offer, currency, sort_order, " +
   "investep_plan_translations(locale, name, subtitle), " +
   "investep_plan_features(investep_features(id, slug, sort_order, investep_feature_translations(locale, label)))";
 
@@ -98,6 +100,7 @@ export async function listAcademyPlans(
       slug: row.slug,
       name: tr?.name ?? null,
       subtitle: tr?.subtitle ?? null,
+      url: row.url,
       priceRegular: Number(row.price_regular),
       priceOffer: row.price_offer == null ? null : Number(row.price_offer),
       currency: row.currency,
@@ -122,6 +125,7 @@ export interface AcademyPlanTranslation {
 export interface AcademyPlanAdminView {
   id: number;
   slug: string;
+  url: string | null;
   priceRegular: number;
   priceOffer: number | null;
   currency: string;
@@ -134,6 +138,7 @@ export interface AcademyPlanAdminView {
 /** Datos para crear un paquete: `slug` único, al menos una traducción, ids de features (puede ir vacío). */
 export interface NewAcademyPlan {
   slug: string;
+  url?: string | null;
   priceRegular: number;
   priceOffer?: number | null;
   currency?: string;
@@ -145,6 +150,7 @@ export interface NewAcademyPlan {
 
 /** Parche parcial. `slug` NO se incluye a propósito: es el identificador estable, no editable. */
 export interface AcademyPlanPatch {
+  url?: string | null;
   priceRegular?: number;
   priceOffer?: number | null;
   currency?: string;
@@ -155,13 +161,14 @@ export interface AcademyPlanPatch {
 }
 
 const ADMIN_SELECT =
-  "id, slug, price_regular, price_offer, currency, sort_order, is_active, " +
+  "id, slug, url, price_regular, price_offer, currency, sort_order, is_active, " +
   "investep_plan_translations(locale, name, subtitle), " +
   "investep_plan_features(investep_feature_id)";
 
 interface AcademyPlanAdminRow {
   id: number;
   slug: string;
+  url: string | null;
   price_regular: number | string;
   price_offer: number | string | null;
   currency: string;
@@ -176,6 +183,7 @@ function toAdminView(row: AcademyPlanAdminRow): AcademyPlanAdminView {
   return {
     id: row.id,
     slug: row.slug,
+    url: row.url,
     priceRegular: Number(row.price_regular),
     priceOffer: row.price_offer == null ? null : Number(row.price_offer),
     currency: row.currency,
@@ -238,16 +246,18 @@ export async function createAcademyPlan(
     .from("investep_plans")
     .insert({
       slug: input.slug,
+      url: input.url ?? null,
       price_regular: input.priceRegular,
       price_offer: input.priceOffer ?? null,
       ...(input.currency !== undefined && { currency: input.currency }),
       ...(input.sortOrder !== undefined && { sort_order: input.sortOrder }),
       ...(input.isActive !== undefined && { is_active: input.isActive }),
     })
-    .select("id, slug, price_regular, price_offer, currency, sort_order, is_active")
+    .select("id, slug, url, price_regular, price_offer, currency, sort_order, is_active")
     .single<{
       id: number;
       slug: string;
+      url: string | null;
       price_regular: number | string;
       price_offer: number | string | null;
       currency: string;
@@ -302,6 +312,7 @@ export async function createAcademyPlan(
   return {
     id: planId,
     slug: data.slug,
+    url: data.url,
     priceRegular: Number(data.price_regular),
     priceOffer: data.price_offer == null ? null : Number(data.price_offer),
     currency: data.currency,
@@ -340,6 +351,7 @@ export async function updateAcademyPlan(
   if (!existing) throw new AppError("NOT_FOUND", "Paquete no encontrado.", 404);
 
   const scalarPayload = {
+    ...(patch.url !== undefined && { url: patch.url }),
     ...(patch.priceRegular !== undefined && { price_regular: patch.priceRegular }),
     ...(patch.priceOffer !== undefined && { price_offer: patch.priceOffer }),
     ...(patch.currency !== undefined && { currency: patch.currency }),
@@ -415,6 +427,7 @@ export async function updateAcademyPlan(
   return {
     id: existing.id,
     slug: existing.slug,
+    url: patch.url !== undefined ? patch.url : existing.url,
     priceRegular: patch.priceRegular ?? existing.priceRegular,
     priceOffer: patch.priceOffer !== undefined ? patch.priceOffer : existing.priceOffer,
     currency: patch.currency ?? existing.currency,

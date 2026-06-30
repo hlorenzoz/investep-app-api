@@ -43,6 +43,7 @@ const CLIENT_ROWS = [
   {
     id: 3,
     slug: "gold",
+    url: "https://stripe.com/pay/gold",
     price_regular: "199.00",
     price_offer: "149.00",
     currency: "USD",
@@ -76,6 +77,7 @@ const CLIENT_ROWS = [
 const ADMIN_ROW = {
   id: 3,
   slug: "gold",
+  url: "https://stripe.com/pay/gold",
   price_regular: "199.00",
   price_offer: null,
   currency: "USD",
@@ -87,6 +89,7 @@ const ADMIN_ROW = {
 
 const CREATE_PAYLOAD = {
   slug: "gold",
+  url: "https://stripe.com/pay/gold",
   priceRegular: 199,
   priceOffer: 149,
   currency: "USD",
@@ -133,6 +136,7 @@ describe("GET /academy/plans (cliente)", () => {
         slug: string;
         name: string | null;
         subtitle: string | null;
+        url: string | null;
         priceRegular: number;
         priceOffer: number | null;
         currency: string;
@@ -147,6 +151,7 @@ describe("GET /academy/plans (cliente)", () => {
       slug: "gold",
       name: "Gold",
       subtitle: "Para traders activos",
+      url: "https://stripe.com/pay/gold",
       priceRegular: 199,
       priceOffer: 149,
       currency: "USD",
@@ -223,11 +228,17 @@ describe("Academy plans (admin)", () => {
         id: number;
         isActive: boolean;
         sortOrder: number;
+        url: string | null;
         translations: { locale: string; name: string }[];
         featureIds: number[];
       }[];
     };
-    expect(body.plans[0]).toMatchObject({ id: 3, isActive: false, sortOrder: 3 });
+    expect(body.plans[0]).toMatchObject({
+      id: 3,
+      isActive: false,
+      sortOrder: 3,
+      url: "https://stripe.com/pay/gold",
+    });
     expect(body.plans[0]?.featureIds).toEqual([1, 2]);
     expect(body.plans[0]?.translations[0]?.name).toBe("Gold");
   });
@@ -236,6 +247,7 @@ describe("Academy plans (admin)", () => {
     const scalar = {
       id: 10,
       slug: "gold",
+      url: "https://stripe.com/pay/gold",
       price_regular: "199.00",
       price_offer: "149.00",
       currency: "USD",
@@ -255,9 +267,16 @@ describe("Academy plans (admin)", () => {
     const res = await createApp().request("/admin/academy/plans", createReq(CREATE_PAYLOAD), ENV);
     expect(res.status).toBe(201);
     const body = (await res.json()) as {
-      plan: { id: number; priceRegular: number; priceOffer: number | null; featureIds: number[] };
+      plan: {
+        id: number;
+        url: string | null;
+        priceRegular: number;
+        priceOffer: number | null;
+        featureIds: number[];
+      };
     };
     expect(body.plan.id).toBe(10);
+    expect(body.plan.url).toBe("https://stripe.com/pay/gold");
     expect(body.plan.priceRegular).toBe(199);
     expect(body.plan.priceOffer).toBe(149);
     expect(body.plan.featureIds).toEqual([1, 2]);
@@ -382,10 +401,11 @@ describe("Academy plans (admin)", () => {
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      plan: { priceRegular: number; isActive: boolean; featureIds: number[] };
+      plan: { priceRegular: number; url: string | null; isActive: boolean; featureIds: number[] };
     };
     // El estado final se arma en memoria desde existing + patch (sin re-lectura).
     expect(body.plan.priceRegular).toBe(150);
+    expect(body.plan.url).toBe("https://stripe.com/pay/gold");
     expect(body.plan.isActive).toBe(true);
     expect(body.plan.featureIds).toEqual([5]);
     // Diff: insertó solo la nueva (5) y borró solo las quitadas (1,2).

@@ -223,8 +223,8 @@ export function createSupabaseCapitalRepository(admin: AppSupabaseClient): Capit
     async transfer(userId, fromId, toId, amount) {
       const { error, status } = await admin.rpc("transfer_capital", {
         p_user_id: userId,
-        p_from_id: fromId,
-        p_to_id: toId,
+        p_from_id: fromId as string,
+        p_to_id: toId as string,
         p_amount: amount,
       });
       if (error) {
