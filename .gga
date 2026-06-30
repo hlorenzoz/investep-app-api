@@ -16,7 +16,7 @@
 #   PROVIDER="github:gpt-4o"
 #   PROVIDER="github:deepseek-r1"
 # PROVIDER="claude"
-PROVIDER="github:gpt-4o"
+PROVIDER="gemini"
 
 # File patterns to include in review (comma-separated)
 # Default: * (all files)
