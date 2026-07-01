@@ -38,6 +38,7 @@ coverage/
 # La config vendorizada (volumes/api, volumes/db/*.sql, volumes/migrate, etc.) SÍ se versiona.
 /volumes/db/data/
 /volumes/storage/
+/volumes/snippets/
 
 # Agentes de IA
 .agents/skills/**
