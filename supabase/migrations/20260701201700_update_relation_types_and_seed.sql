@@ -1,15 +1,15 @@
 -- Migration: Update relation types and seed rich tickers dataset
 -- ==============================================================
 
--- 1. Actualizar restricción check en ticker_relations
+-- 1. Limpiar registros de tickers existentes
+TRUNCATE public.ticker_relations, public.tickers RESTART IDENTITY CASCADE;
+
+-- 2. Actualizar restricción check en ticker_relations
 ALTER TABLE public.ticker_relations
   DROP CONSTRAINT IF EXISTS ticker_relations_relation_type_check;
 
 ALTER TABLE public.ticker_relations
   ADD CONSTRAINT ticker_relations_relation_type_check CHECK (relation_type IN ('x2', 'x3', 'inverso'));
-
--- 2. Limpiar registros de tickers existentes
-TRUNCATE public.ticker_relations, public.tickers RESTART IDENTITY CASCADE;
 
 -- 3. Insertar Activos Principales y ETFs relacionados
 INSERT INTO public.tickers (symbol, name, asset_class) VALUES
