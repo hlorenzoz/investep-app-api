@@ -11,6 +11,7 @@ import { capitalRouter } from "./features/capital";
 import { healthRouter } from "./features/health/health.router";
 import { adminPlansRouter, plansRouter } from "./features/plans";
 import { portfolioRouter } from "./features/portfolio";
+import { adminTickersRouter, tickersRouter } from "./features/tickers";
 import { adminUsersRouter } from "./features/users";
 import { openApiConfig, validationHook } from "./lib/openapi";
 import { docsGuard } from "./middleware/docs-guard";
@@ -43,11 +44,13 @@ export function createApp() {
   app.route("/capital", capitalRouter);
   app.route("/portfolio", portfolioRouter);
   app.route("/brokers", brokersRouter);
+  app.route("/tickers", tickersRouter);
   app.route("/academy/plans", academyRouter);
 
   // --- Admin: CRUD de catálogos, protegido por `requireAdmin` (AGENTS.md §5/§6) ---
   app.route("/admin/brokers", adminBrokersRouter);
   app.route("/admin/plans", adminPlansRouter);
+  app.route("/admin/tickers", adminTickersRouter);
   app.route("/admin/academy", adminAcademyRouter);
   app.route("/admin/users", adminUsersRouter);
 

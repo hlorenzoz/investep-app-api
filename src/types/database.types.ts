@@ -341,6 +341,39 @@ export type Database = {
           },
         ]
       }
+      investep_plan_tickers: {
+        Row: {
+          created_at: string
+          investep_plan_id: number
+          ticker_id: number
+        }
+        Insert: {
+          created_at?: string
+          investep_plan_id: number
+          ticker_id: number
+        }
+        Update: {
+          created_at?: string
+          investep_plan_id?: number
+          ticker_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "investep_plan_tickers_investep_plan_id_fkey"
+            columns: ["investep_plan_id"]
+            isOneToOne: false
+            referencedRelation: "investep_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "investep_plan_tickers_ticker_id_fkey"
+            columns: ["ticker_id"]
+            isOneToOne: false
+            referencedRelation: "tickers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       investep_plan_translations: {
         Row: {
           investep_plan_id: number
@@ -512,6 +545,129 @@ export type Database = {
           full_name?: string | null
           id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      ticker_relations: {
+        Row: {
+          created_at: string
+          multiplier: number
+          parent_ticker_id: number
+          related_ticker_id: number
+          relation_type: string
+        }
+        Insert: {
+          created_at?: string
+          multiplier?: number
+          parent_ticker_id: number
+          related_ticker_id: number
+          relation_type: string
+        }
+        Update: {
+          created_at?: string
+          multiplier?: number
+          parent_ticker_id?: number
+          related_ticker_id?: number
+          relation_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticker_relations_parent_ticker_id_fkey"
+            columns: ["parent_ticker_id"]
+            isOneToOne: false
+            referencedRelation: "tickers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticker_relations_related_ticker_id_fkey"
+            columns: ["related_ticker_id"]
+            isOneToOne: false
+            referencedRelation: "tickers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickers: {
+        Row: {
+          asset_class: string
+          avg_volume: number | null
+          change_pct: number | null
+          country: string | null
+          created_at: string
+          dividend_yield: number | null
+          exchange: string | null
+          fifty_two_w_high: number | null
+          fifty_two_w_low: number | null
+          financials: Json
+          forward_pe: number | null
+          id: number
+          industry: string | null
+          market_cap: number | null
+          name: string
+          pb_ratio: number | null
+          pe_ratio: number | null
+          peg_ratio: number | null
+          prev_close: number | null
+          price: number | null
+          ps_ratio: number | null
+          sector: string | null
+          symbol: string
+          updated_at: string
+          volume: number | null
+        }
+        Insert: {
+          asset_class?: string
+          avg_volume?: number | null
+          change_pct?: number | null
+          country?: string | null
+          created_at?: string
+          dividend_yield?: number | null
+          exchange?: string | null
+          fifty_two_w_high?: number | null
+          fifty_two_w_low?: number | null
+          financials?: Json
+          forward_pe?: number | null
+          id?: never
+          industry?: string | null
+          market_cap?: number | null
+          name: string
+          pb_ratio?: number | null
+          pe_ratio?: number | null
+          peg_ratio?: number | null
+          prev_close?: number | null
+          price?: number | null
+          ps_ratio?: number | null
+          sector?: string | null
+          symbol: string
+          updated_at?: string
+          volume?: number | null
+        }
+        Update: {
+          asset_class?: string
+          avg_volume?: number | null
+          change_pct?: number | null
+          country?: string | null
+          created_at?: string
+          dividend_yield?: number | null
+          exchange?: string | null
+          fifty_two_w_high?: number | null
+          fifty_two_w_low?: number | null
+          financials?: Json
+          forward_pe?: number | null
+          id?: never
+          industry?: string | null
+          market_cap?: number | null
+          name?: string
+          pb_ratio?: number | null
+          pe_ratio?: number | null
+          peg_ratio?: number | null
+          prev_close?: number | null
+          price?: number | null
+          ps_ratio?: number | null
+          sector?: string | null
+          symbol?: string
+          updated_at?: string
+          volume?: number | null
         }
         Relationships: []
       }
