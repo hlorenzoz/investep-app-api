@@ -489,6 +489,19 @@ describe("deleteAllocation", () => {
     await expect(deleteAllocation(repo, U, "a1")).resolves.toBeUndefined();
   });
 
+  it("actualiza totalCapital al valor de las asignaciones restantes al borrar", async () => {
+    const repo = makeRepo({
+      capital: { [U]: { totalCapital: 5000, currency: "USD" } },
+      allocations: [
+        alloc(U, { id: "a1", initialDeposit: 1000 }),
+        alloc(U, { id: "a2", initialDeposit: 2000 }),
+      ],
+    });
+    await deleteAllocation(repo, U, "a1");
+    const cap = await repo.getCapital(U);
+    expect(cap?.totalCapital).toBe(2000);
+  });
+
   it("404 si no existe o no es del usuario", async () => {
     await expect(deleteAllocation(makeRepo(), U, "ghost")).rejects.toMatchObject({
       code: "NOT_FOUND",
