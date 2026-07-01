@@ -142,7 +142,7 @@ describe("Tickers API", () => {
           ...TICKER_RAW_ROW,
           ticker_relations: [
             {
-              relation_type: "leveraged_long",
+              relation_type: "x2",
               multiplier: "2.00",
               related_ticker: { symbol: "TSLL", name: "TSLA Bull 2X" },
             },
@@ -173,7 +173,7 @@ describe("Tickers API", () => {
       expect(body.relations[0]).toEqual({
         symbol: "TSLL",
         name: "TSLA Bull 2X",
-        relationType: "leveraged_long",
+        relationType: "x2",
         multiplier: 2.0,
       });
       expect(body.plans).toEqual(["gold"]);
@@ -378,7 +378,7 @@ describe("Tickers API", () => {
           },
           body: JSON.stringify({
             relatedTickerId: 2,
-            relationType: "leveraged_long",
+            relationType: "x2",
             multiplier: 2.0,
           }),
         },
@@ -401,7 +401,7 @@ describe("Tickers API", () => {
           },
           body: JSON.stringify({
             relatedTickerId: 1, // Mismo ID
-            relationType: "inverse",
+            relationType: "inverso",
             multiplier: -1.0,
           }),
         },
@@ -461,7 +461,7 @@ describe("Tickers API", () => {
           },
           body: JSON.stringify({
             relatedTickerId: 2,
-            relationType: "leveraged_long",
+            relationType: "x2",
             multiplier: 0.0,
           }),
         },
@@ -471,7 +471,7 @@ describe("Tickers API", () => {
       expect(res.status).toBe(422);
     });
 
-    it("POST /admin/tickers/{id}/relations 422 previene signo inconsistente para short/inverse", async () => {
+    it("POST /admin/tickers/{id}/relations 422 previene signo inconsistente para inverso", async () => {
       mockFetchAdmin({}, 201);
       const res = await createApp().request(
         "/admin/tickers/1/relations",
@@ -483,7 +483,7 @@ describe("Tickers API", () => {
           },
           body: JSON.stringify({
             relatedTickerId: 2,
-            relationType: "inverse",
+            relationType: "inverso",
             multiplier: 1.5,
           }),
         },
@@ -493,7 +493,7 @@ describe("Tickers API", () => {
       expect(res.status).toBe(422);
     });
 
-    it("POST /admin/tickers/{id}/relations 422 previene signo inconsistente para leveraged_long", async () => {
+    it("POST /admin/tickers/{id}/relations 422 previene signo inconsistente para leveraged (x2/x3)", async () => {
       mockFetchAdmin({}, 201);
       const res = await createApp().request(
         "/admin/tickers/1/relations",
@@ -505,7 +505,7 @@ describe("Tickers API", () => {
           },
           body: JSON.stringify({
             relatedTickerId: 2,
-            relationType: "leveraged_long",
+            relationType: "x2",
             multiplier: -2.0,
           }),
         },

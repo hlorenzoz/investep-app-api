@@ -2,13 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { jsonErrorResponse } from "../../lib/openapi";
 
 export const AssetClassEnum = z.enum(["stock", "etf", "index", "crypto", "commodity", "currency"]);
-export const RelationTypeEnum = z.enum([
-  "leveraged_long",
-  "leveraged_short",
-  "inverse",
-  "underlying",
-  "peer",
-]);
+export const RelationTypeEnum = z.enum(["x2", "x3", "inverso"]);
 
 export const TickerSchema = z
   .object({
@@ -46,7 +40,7 @@ export const TickerRelationInfoSchema = z
   .object({
     symbol: z.string().openapi({ example: "TSLL" }),
     name: z.string().openapi({ example: "Direxion Daily TSLA Bull 2X Shares" }),
-    relationType: RelationTypeEnum.openapi({ example: "leveraged_long" }),
+    relationType: RelationTypeEnum.openapi({ example: "x2" }),
     multiplier: z.number().openapi({ example: 2.0 }),
   })
   .openapi("TickerRelationInfo");
@@ -129,7 +123,7 @@ export const UpdateTickerSchema = CreateTickerSchema.partial().openapi("UpdateTi
 export const RelationPayloadSchema = z
   .object({
     relatedTickerId: z.number().int().positive().openapi({ example: 2 }),
-    relationType: RelationTypeEnum.openapi({ example: "leveraged_long" }),
+    relationType: RelationTypeEnum.openapi({ example: "x2" }),
     multiplier: z.number().default(1.0).openapi({ example: 2.0 }),
   })
   .openapi("RelationPayload");
@@ -137,7 +131,7 @@ export const RelationPayloadSchema = z
 export const RelationDeletePayloadSchema = z
   .object({
     relatedTickerId: z.number().int().positive().openapi({ example: 2 }),
-    relationType: RelationTypeEnum.openapi({ example: "leveraged_long" }),
+    relationType: RelationTypeEnum.openapi({ example: "x2" }),
   })
   .openapi("RelationDeletePayload");
 

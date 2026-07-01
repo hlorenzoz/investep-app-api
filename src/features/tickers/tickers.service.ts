@@ -18,7 +18,7 @@ export interface ListTickersOptions {
   limit?: number;
 }
 
-export type RelationType = "leveraged_long" | "leveraged_short" | "inverse" | "underlying" | "peer";
+export type RelationType = "x2" | "x3" | "inverso";
 
 export interface TickerRelationInfo {
   symbol: string;
@@ -330,17 +330,17 @@ export async function associateRelation(
       422,
     );
   }
-  if ((relationType === "inverse" || relationType === "leveraged_short") && multiplier > 0) {
+  if (relationType === "inverso" && multiplier > 0) {
     throw new AppError(
       "VALIDATION_ERROR",
-      "El multiplicador para relaciones inversas o cortas debe ser negativo.",
+      "El multiplicador para relaciones inversas debe ser negativo.",
       422,
     );
   }
-  if (relationType === "leveraged_long" && multiplier < 0) {
+  if ((relationType === "x2" || relationType === "x3") && multiplier < 0) {
     throw new AppError(
       "VALIDATION_ERROR",
-      "El multiplicador para relaciones apalancadas largas debe ser positivo.",
+      "El multiplicador para relaciones apalancadas (x2, x3) debe ser positivo.",
       422,
     );
   }
