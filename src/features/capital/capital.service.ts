@@ -92,25 +92,18 @@ export async function createAllocation(
   let capital = await repo.getCapital(userId);
   const currency = input.currency ?? capital?.currency ?? "USD";
 
+  if (capital && currency !== capital.currency) {
+    throw new AppError("VALIDATION_ERROR", "La moneda debe coincidir con la del capital.", 422);
+  }
+
   const accountType: AccountType = plan.accountType;
   const allocations = await repo.listAllocations(userId);
 
   const neededCapital = sumDeposits(allocations) + input.initialDeposit;
-  if (!capital) {
-    capital = await repo.upsertCapital(userId, {
-      totalCapital: neededCapital,
-      currency,
-    });
-  } else if (capital.totalCapital < neededCapital) {
-    capital = await repo.upsertCapital(userId, {
-      totalCapital: neededCapital,
-      currency,
-    });
-  }
-
-  if (currency !== capital.currency) {
-    throw new AppError("VALIDATION_ERROR", "La moneda debe coincidir con la del capital.", 422);
-  }
+  capital = await repo.upsertCapital(userId, {
+    totalCapital: neededCapital,
+    currency,
+  });
 
   return repo.createAllocation(userId, {
     brokerId: input.brokerId,
@@ -165,9 +158,7 @@ export async function updateAllocation(
   const initialDeposit = patch.initialDeposit ?? existing.initialDeposit;
   const allocations = await repo.listAllocations(userId);
   const neededCapital = sumDeposits(allocations, id) + initialDeposit;
-  if (capital.totalCapital < neededCapital) {
-    await repo.upsertCapital(userId, { totalCapital: neededCapital, currency });
-  }
+  await repo.upsertCapital(userId, { totalCapital: neededCapital, currency });
 
   return repo.updateAllocation(userId, id, { investmentPlanId, initialDeposit, currency });
 }
@@ -182,6 +173,12 @@ export async function deleteAllocation(
   if (!deleted) {
     throw new AppError("NOT_FOUND", "Asignación no encontrada.", 404);
   }
+
+  const remainingAllocations = await repo.listAllocations(userId);
+  const remainingCapital = sumDeposits(remainingAllocations);
+  const capital = await repo.getCapital(userId);
+  const currency = capital?.currency ?? "USD";
+  await repo.upsertCapital(userId, { totalCapital: remainingCapital, currency });
 }
 
 export interface TransferCapitalInput {
