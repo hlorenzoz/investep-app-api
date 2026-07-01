@@ -200,23 +200,25 @@ describe("capital endpoints", () => {
     expect(body.allocation.initialDeposit).toBe(4000);
   });
 
-  it("POST /capital/allocations que supera el capital → 409", async () => {
+  it("POST /capital/allocations que supera el capital → 201 (auto-incrementa)", async () => {
     mockSupabase({
       capital: { total_capital: "5000.00", currency: "USD" },
       plan: { id: 1, account_type: "equity", target_monthly_pct: "25.00" },
       broker: { id: 10, slug: "interactive-brokers" },
       allocations: [allocDb({ id: UUID, initial_deposit: "4000.00" })],
+      created: allocDb({ id: UUID, initial_deposit: "2000.00" }),
+      capitalUpsert: { total_capital: "6000.00", currency: "USD" },
     });
     const res = await createApp().request(
       "/capital/allocations",
       {
         ...JSON_AUTH,
         method: "POST",
-        body: JSON.stringify({ brokerId: 11, investmentPlanId: 1, initialDeposit: 2000 }),
+        body: JSON.stringify({ brokerId: 10, investmentPlanId: 1, initialDeposit: 2000 }),
       },
       ENV,
     );
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(201);
   });
 
   it("POST /capital/allocations con broker inexistente → 404", async () => {

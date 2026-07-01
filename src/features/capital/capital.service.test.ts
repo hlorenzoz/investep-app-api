@@ -332,26 +332,32 @@ describe("createAllocation", () => {
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR", status: 422 });
   });
 
-  it("409 duplicado (mismo broker + account_type)", async () => {
+  it("permite duplicados (mismo broker + account_type)", async () => {
     const repo = makeRepo({
       capital: { [U]: { totalCapital: 5000, currency: "USD" } },
       allocations: [
         alloc(U, { id: "a1", brokerId: 10, accountType: "equity", initialDeposit: 1000 }),
       ],
     });
-    await expect(
-      createAllocation(repo, U, { brokerId: 10, investmentPlanId: 1, initialDeposit: 100 }),
-    ).rejects.toMatchObject({ code: "CONFLICT", status: 409 });
+    const result = await createAllocation(repo, U, {
+      brokerId: 10,
+      investmentPlanId: 1,
+      initialDeposit: 100,
+    });
+    expect(result.brokerId).toBe(10);
+    expect(result.accountType).toBe("equity");
   });
 
-  it("409 si supera el capital", async () => {
-    await expect(
-      createAllocation(repoWithCapital(5000), U, {
-        brokerId: 10,
-        investmentPlanId: 1,
-        initialDeposit: 6000,
-      }),
-    ).rejects.toMatchObject({ code: "CONFLICT", status: 409 });
+  it("auto-incrementa el capital si el depósito supera el capital actual", async () => {
+    const repo = repoWithCapital(5000);
+    const result = await createAllocation(repo, U, {
+      brokerId: 10,
+      investmentPlanId: 1,
+      initialDeposit: 6000,
+    });
+    expect(result.initialDeposit).toBe(6000);
+    const cap = await repo.getCapital(U);
+    expect(cap?.totalCapital).toBe(6000);
   });
 
   it("permite la asignación que llena el capital exactamente (borde ==)", async () => {
@@ -451,10 +457,12 @@ describe("updateAllocation", () => {
     });
   });
 
-  it("409 si el nuevo depósito supera el capital", async () => {
-    await expect(
-      updateAllocation(repoWith(), U, "a1", { initialDeposit: 6000 }),
-    ).rejects.toMatchObject({ code: "CONFLICT", status: 409 });
+  it("auto-incrementa el capital si el nuevo depósito supera el capital actual", async () => {
+    const repo = repoWith();
+    const result = await updateAllocation(repo, U, "a1", { initialDeposit: 6000 });
+    expect(result.initialDeposit).toBe(6000);
+    const cap = await repo.getCapital(U);
+    expect(cap?.totalCapital).toBe(6000);
   });
 
   it("excluye el depósito propio al validar contra el capital (multi-asignación, borde ==)", async () => {

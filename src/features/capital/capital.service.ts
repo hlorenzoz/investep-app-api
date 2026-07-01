@@ -92,30 +92,24 @@ export async function createAllocation(
   let capital = await repo.getCapital(userId);
   const currency = input.currency ?? capital?.currency ?? "USD";
 
+  const accountType: AccountType = plan.accountType;
+  const allocations = await repo.listAllocations(userId);
+
+  const neededCapital = sumDeposits(allocations) + input.initialDeposit;
   if (!capital) {
     capital = await repo.upsertCapital(userId, {
-      totalCapital: input.initialDeposit,
+      totalCapital: neededCapital,
+      currency,
+    });
+  } else if (capital.totalCapital < neededCapital) {
+    capital = await repo.upsertCapital(userId, {
+      totalCapital: neededCapital,
       currency,
     });
   }
 
   if (currency !== capital.currency) {
     throw new AppError("VALIDATION_ERROR", "La moneda debe coincidir con la del capital.", 422);
-  }
-
-  const accountType: AccountType = plan.accountType;
-  const allocations = await repo.listAllocations(userId);
-
-  if (allocations.some((a) => a.brokerId === input.brokerId && a.accountType === accountType)) {
-    throw new AppError(
-      "CONFLICT",
-      "Ya existe una asignación para ese broker y tipo de cuenta.",
-      409,
-    );
-  }
-
-  if (sumDeposits(allocations) + input.initialDeposit > capital.totalCapital) {
-    throw new AppError("CONFLICT", "La suma de depósitos supera el capital total.", 409);
   }
 
   return repo.createAllocation(userId, {
@@ -170,8 +164,9 @@ export async function updateAllocation(
 
   const initialDeposit = patch.initialDeposit ?? existing.initialDeposit;
   const allocations = await repo.listAllocations(userId);
-  if (sumDeposits(allocations, id) + initialDeposit > capital.totalCapital) {
-    throw new AppError("CONFLICT", "La suma de depósitos supera el capital total.", 409);
+  const neededCapital = sumDeposits(allocations, id) + initialDeposit;
+  if (capital.totalCapital < neededCapital) {
+    await repo.upsertCapital(userId, { totalCapital: neededCapital, currency });
   }
 
   return repo.updateAllocation(userId, id, { investmentPlanId, initialDeposit, currency });
