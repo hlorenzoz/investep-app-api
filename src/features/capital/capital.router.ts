@@ -6,7 +6,6 @@ import {
   createAllocationHandler,
   deleteAllocationHandler,
   getCapitalHandler,
-  putCapitalHandler,
   transferCapitalHandler,
   updateAllocationHandler,
 } from "./capital.handlers";
@@ -14,7 +13,6 @@ import {
   createAllocationRoute,
   deleteAllocationRoute,
   getCapitalRoute,
-  putCapitalRoute,
   transferCapitalRoute,
   updateAllocationRoute,
 } from "./capital.routes";
@@ -31,7 +29,6 @@ capitalRouter.use("*", requireAuth);
 
 capitalRouter
   .openapi(getCapitalRoute, getCapitalHandler)
-  .openapi(putCapitalRoute, putCapitalHandler)
   .openapi(createAllocationRoute, createAllocationHandler)
   .openapi(updateAllocationRoute, updateAllocationHandler)
   .openapi(deleteAllocationRoute, deleteAllocationHandler)

@@ -16,6 +16,7 @@ const JSON_AUTH = {
   headers: { Authorization: "Bearer t", "Content-Type": "application/json" },
 };
 const UUID = "8f3b1d2e-0a4c-4e6f-9b2a-1c2d3e4f5a6b";
+const UUID2 = "1c2d3e4f-5a6b-7c8d-9e0f-2a3b4c5d6e7f";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -122,11 +123,9 @@ describe("capital endpoints", () => {
     const body = (await res.json()) as {
       capital: unknown;
       totalAllocated: number;
-      available: number;
     };
     expect(body.capital).toBeNull();
     expect(body.totalAllocated).toBe(0);
-    expect(body.available).toBe(0);
   });
 
   it("GET /capital con datos → totales calculados y numeric coercido", async () => {
@@ -140,39 +139,12 @@ describe("capital endpoints", () => {
       capital: { totalCapital: number };
       allocations: { initialDeposit: number; targetMonthlyPct: number; brokerSlug: string }[];
       totalAllocated: number;
-      available: number;
     };
     expect(body.capital.totalCapital).toBe(5000);
     expect(body.totalAllocated).toBe(4000);
-    expect(body.available).toBe(1000);
     expect(body.allocations[0]?.initialDeposit).toBe(4000);
     expect(body.allocations[0]?.targetMonthlyPct).toBe(25);
     expect(body.allocations[0]?.brokerSlug).toBe("interactive-brokers");
-  });
-
-  it("PUT /capital happy → 200", async () => {
-    mockSupabase({
-      allocations: [],
-      capitalUpsert: { total_capital: "5000.00", currency: "USD" },
-    });
-    const res = await createApp().request(
-      "/capital",
-      { ...JSON_AUTH, method: "PUT", body: JSON.stringify({ totalCapital: 5000 }) },
-      ENV,
-    );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { capital: { totalCapital: number } };
-    expect(body.capital.totalCapital).toBe(5000);
-  });
-
-  it("PUT /capital con totalCapital negativo → 422 (Zod)", async () => {
-    mockSupabase({});
-    const res = await createApp().request(
-      "/capital",
-      { ...JSON_AUTH, method: "PUT", body: JSON.stringify({ totalCapital: -1 }) },
-      ENV,
-    );
-    expect(res.status).toBe(422);
   });
 
   it("POST /capital/allocations happy → 201", async () => {
@@ -319,12 +291,22 @@ describe("capital endpoints", () => {
     expect(res.status).toBe(422);
   });
 
-  it("PUT /capital con currency malformada → 422 (Zod regex)", async () => {
-    // "us" no matchea ^[A-Z]{3}$ -> 422. Mata la mutación que afloje el regex de currency.
+  it("POST /capital/allocations con currency malformada → 422 (Zod regex)", async () => {
+    // "us" no matchea ^[A-Z]{3}$ -> 422 (falla en Zod antes del handler).
+    // Mata la mutación que afloje el regex de currency.
     mockSupabase({});
     const res = await createApp().request(
-      "/capital",
-      { ...JSON_AUTH, method: "PUT", body: JSON.stringify({ totalCapital: 5000, currency: "us" }) },
+      "/capital/allocations",
+      {
+        ...JSON_AUTH,
+        method: "POST",
+        body: JSON.stringify({
+          brokerId: 10,
+          investmentPlanId: 1,
+          initialDeposit: 4000,
+          currency: "us",
+        }),
+      },
       ENV,
     );
     expect(res.status).toBe(422);
@@ -362,7 +344,7 @@ describe("capital endpoints", () => {
         ...JSON_AUTH,
         method: "POST",
         body: JSON.stringify({
-          fromAllocationId: "capital",
+          fromAllocationId: UUID2,
           toAllocationId: UUID,
           amount: 500,
         }),
@@ -374,7 +356,7 @@ describe("capital endpoints", () => {
     expect(body.success).toBe(true);
   });
 
-  it("POST /capital/transfers con origen y destino iguales → 422 (Zod/service)", async () => {
+  it("POST /capital/transfers con origen y destino iguales → 422 (service)", async () => {
     mockSupabase({});
     const res = await createApp().request(
       "/capital/transfers",
@@ -382,8 +364,8 @@ describe("capital endpoints", () => {
         ...JSON_AUTH,
         method: "POST",
         body: JSON.stringify({
-          fromAllocationId: "capital",
-          toAllocationId: "capital",
+          fromAllocationId: UUID,
+          toAllocationId: UUID,
           amount: 500,
         }),
       },
@@ -400,7 +382,7 @@ describe("capital endpoints", () => {
         ...JSON_AUTH,
         method: "POST",
         body: JSON.stringify({
-          fromAllocationId: "capital",
+          fromAllocationId: UUID2,
           toAllocationId: UUID,
           amount: -100,
         }),
@@ -422,7 +404,7 @@ describe("capital endpoints", () => {
         ...JSON_AUTH,
         method: "POST",
         body: JSON.stringify({
-          fromAllocationId: "capital",
+          fromAllocationId: UUID2,
           toAllocationId: UUID,
           amount: 500,
         }),

@@ -7,7 +7,6 @@ import type {
   CreateAllocationRoute,
   DeleteAllocationRoute,
   GetCapitalRoute,
-  PutCapitalRoute,
   TransferCapitalRoute,
   UpdateAllocationRoute,
 } from "./capital.routes";
@@ -15,7 +14,6 @@ import {
   createAllocation,
   deleteAllocation,
   getCapitalView,
-  setCapital,
   transferCapital,
   updateAllocation,
 } from "./capital.service";
@@ -25,15 +23,6 @@ const repoFor = (env: Env) => createSupabaseCapitalRepository(createSupabaseAdmi
 export const getCapitalHandler: RouteHandler<GetCapitalRoute, AuthedBindings> = async (c) => {
   const view = await getCapitalView(repoFor(c.env), c.get("user").id);
   return c.json(view, 200);
-};
-
-export const putCapitalHandler: RouteHandler<PutCapitalRoute, AuthedBindings> = async (c) => {
-  const { totalCapital, currency } = c.req.valid("json");
-  const capital = await setCapital(repoFor(c.env), c.get("user").id, {
-    totalCapital,
-    currency: currency ?? "USD",
-  });
-  return c.json({ capital }, 200);
 };
 
 export const createAllocationHandler: RouteHandler<CreateAllocationRoute, AuthedBindings> = async (

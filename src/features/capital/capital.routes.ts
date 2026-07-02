@@ -33,7 +33,6 @@ export const CapitalViewSchema = z
     capital: CapitalSchema.nullable(),
     allocations: z.array(AllocationSchema),
     totalAllocated: z.number().openapi({ example: 5000 }),
-    available: z.number().openapi({ example: 0 }),
   })
   .openapi("CapitalView");
 
@@ -50,7 +49,8 @@ export const getCapitalRoute = createRoute({
   path: "/",
   tags: ["Capital"],
   summary: "Capital y asignaciones del usuario",
-  description: "Devuelve el capital total, sus asignaciones a brokers y cuánto queda disponible.",
+  description:
+    "Devuelve el capital total (derivado: la suma de las cuentas de bróker) y sus asignaciones.",
   security: [{ bearerAuth: [] }],
   responses: {
     200: { content: { "application/json": { schema: CapitalViewSchema } }, description: "OK." },
@@ -58,37 +58,6 @@ export const getCapitalRoute = createRoute({
   },
 });
 export type GetCapitalRoute = typeof getCapitalRoute;
-
-// --- PUT /capital ---
-export const putCapitalRoute = createRoute({
-  method: "put",
-  path: "/",
-  tags: ["Capital"],
-  summary: "Setear/actualizar el capital total",
-  security: [{ bearerAuth: [] }],
-  request: {
-    body: {
-      content: {
-        "application/json": {
-          schema: z.object({
-            totalCapital: z.number().nonnegative(),
-            currency: CurrencySchema.optional(),
-          }),
-        },
-      },
-    },
-  },
-  responses: {
-    200: {
-      content: { "application/json": { schema: z.object({ capital: CapitalSchema }) } },
-      description: "Capital actualizado.",
-    },
-    401: jsonErrorResponse("Falta o es inválido el token."),
-    409: jsonErrorResponse("El capital no puede ser menor a lo ya asignado."),
-    422: jsonErrorResponse("Entrada inválida."),
-  },
-});
-export type PutCapitalRoute = typeof putCapitalRoute;
 
 // --- POST /capital/allocations ---
 export const createAllocationRoute = createRoute({
@@ -118,8 +87,7 @@ export const createAllocationRoute = createRoute({
     },
     401: jsonErrorResponse("Falta o es inválido el token."),
     404: jsonErrorResponse("Broker o plan inexistente."),
-    409: jsonErrorResponse("Duplicado, sin capital o supera el capital."),
-    422: jsonErrorResponse("Entrada inválida."),
+    422: jsonErrorResponse("Entrada inválida (moneda o cuerpo malformado)."),
   },
 });
 export type CreateAllocationRoute = typeof createAllocationRoute;
@@ -152,7 +120,7 @@ export const updateAllocationRoute = createRoute({
     },
     401: jsonErrorResponse("Falta o es inválido el token."),
     404: jsonErrorResponse("Asignación o plan inexistente."),
-    409: jsonErrorResponse("Supera el capital."),
+    409: jsonErrorResponse("No hay capital configurado para el usuario."),
     422: jsonErrorResponse("Entrada inválida."),
   },
 });
@@ -180,19 +148,15 @@ export const deleteAllocationRoute = createRoute({
 export type DeleteAllocationRoute = typeof deleteAllocationRoute;
 
 // --- POST /capital/transfers ---
-const AllocationOrCapitalSchema = z.union([z.string().uuid(), z.literal("capital")]);
-
 export const TransferCapitalRequestSchema = z
   .object({
-    fromAllocationId: AllocationOrCapitalSchema.openapi({
-      description:
-        "ID de la asignación de origen (UUID) o la palabra 'capital' para transferir desde el saldo libre general.",
-      example: "capital",
-    }),
-    toAllocationId: AllocationOrCapitalSchema.openapi({
-      description:
-        "ID de la asignación de destino (UUID) o la palabra 'capital' para liberar fondos hacia el saldo libre general.",
+    fromAllocationId: z.string().uuid().openapi({
+      description: "ID (UUID) de la asignación de bróker de origen.",
       example: "8f3b1d2e-0a4c-4e6f-9b2a-1c2d3e4f5a6b",
+    }),
+    toAllocationId: z.string().uuid().openapi({
+      description: "ID (UUID) de la asignación de bróker de destino.",
+      example: "1c2d3e4f-5a6b-7c8d-9e0f-2a3b4c5d6e7f",
     }),
     amount: z.number().positive().openapi({
       description: "Monto a transferir.",
@@ -205,9 +169,9 @@ export const transferCapitalRoute = createRoute({
   method: "post",
   path: "/transfers",
   tags: ["Capital"],
-  summary: "Transferir saldo entre cuentas o capital general",
+  summary: "Transferir saldo entre dos cuentas de bróker",
   description:
-    "Transfiere saldo de forma manual para balancear las cuentas. Permite mover fondos entre dos asignaciones de broker, o desde/hacia el capital general disponible.",
+    "Transfiere saldo de forma manual entre dos asignaciones de bróker del usuario para balancear las cuentas.",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -229,9 +193,7 @@ export const transferCapitalRoute = createRoute({
     },
     401: jsonErrorResponse("Falta o es inválido el token."),
     404: jsonErrorResponse("Asignación de origen/destino inexistente o no pertenece al usuario."),
-    409: jsonErrorResponse(
-      "Monto inválido, cuentas iguales, o saldo/capital disponible insuficiente.",
-    ),
+    409: jsonErrorResponse("Monto inválido, cuentas iguales, o saldo insuficiente en el origen."),
     422: jsonErrorResponse("Cuerpo de petición malformado (Zod)."),
   },
 });

@@ -58,7 +58,6 @@ interface CapitalView {
   capital: { totalCapital: number; currency: string } | null;
   allocations: Allocation[];
   totalAllocated: number;
-  available: number;
 }
 
 test.describe("capital (E2E)", () => {
@@ -82,7 +81,6 @@ test.describe("capital (E2E)", () => {
     const body = (await res.json()) as CapitalView;
     expect(Array.isArray(body.allocations)).toBe(true);
     expect(typeof body.totalAllocated).toBe("number");
-    expect(typeof body.available).toBe("number");
   });
 
   test("GET /plans → 200 con al menos un plan del catálogo", async ({ request }) => {
@@ -91,19 +89,6 @@ test.describe("capital (E2E)", () => {
     const body = (await res.json()) as { plans: { id: number; accountType: string }[] };
     expect(body.plans.length).toBeGreaterThan(0);
     expect(body.plans[0]?.accountType).toBe("equity");
-  });
-
-  test("PUT /capital → 200 y GET lo refleja", async ({ request }) => {
-    const put = await request.put("/capital", {
-      headers: authHeaders,
-      data: { totalCapital: 1_000_000, currency: "USD" },
-    });
-    expect(put.status()).toBe(200);
-
-    const get = await request.get("/capital", { headers: authHeaders });
-    const body = (await get.json()) as CapitalView;
-    expect(body.capital?.totalCapital).toBe(1_000_000);
-    expect(body.capital?.currency).toBe("USD");
   });
 
   test("ciclo de asignación: limpiar → POST 201 → GET refleja → DELETE 200", async ({
@@ -117,13 +102,7 @@ test.describe("capital (E2E)", () => {
       await request.delete(`/capital/allocations/${a.id}`, { headers: authHeaders });
     }
 
-    // 2) Capital alto (no debe quedar por debajo de lo asignado, ya limpiado).
-    await request.put("/capital", {
-      headers: authHeaders,
-      data: { totalCapital: 1_000_000, currency: "USD" },
-    });
-
-    // 3) Plan equity real (vía API) + broker real (vía service-role).
+    // 2) Plan equity real (vía API) + broker real (vía service-role).
     const plans = (await (
       await request.get("/plans?accountType=equity", { headers: authHeaders })
     ).json()) as { plans: { id: number }[] };
@@ -131,7 +110,7 @@ test.describe("capital (E2E)", () => {
     expect(investmentPlanId).toBeTruthy();
     const brokerId = await firstBrokerId();
 
-    // 4) POST → 201
+    // 3) POST → 201
     const created = await request.post("/capital/allocations", {
       headers: authHeaders,
       data: { brokerId, investmentPlanId, initialDeposit: 4000 },
@@ -141,14 +120,14 @@ test.describe("capital (E2E)", () => {
     expect(allocation.brokerId).toBe(brokerId);
     expect(allocation.accountType).toBe("equity");
 
-    // 5) GET refleja la asignación
+    // 4) GET refleja la asignación
     const after = (await (
       await request.get("/capital", { headers: authHeaders })
     ).json()) as CapitalView;
     expect(after.allocations.some((a) => a.id === allocation.id)).toBe(true);
     expect(after.totalAllocated).toBe(4000);
 
-    // 6) DELETE → 200 (limpieza)
+    // 5) DELETE → 200 (limpieza)
     const deleted = await request.delete(`/capital/allocations/${allocation.id}`, {
       headers: authHeaders,
     });

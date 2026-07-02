@@ -61,12 +61,7 @@ export interface CapitalRepository {
   deleteAllocation(userId: string, id: string): Promise<boolean>;
   getPlan(planId: number): Promise<PlanRef | null>;
   getBroker(brokerId: number): Promise<BrokerRef | null>;
-  transfer(
-    userId: string,
-    fromId: string | null,
-    toId: string | null,
-    amount: number,
-  ): Promise<void>;
+  transfer(userId: string, fromId: string, toId: string, amount: number): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -223,21 +218,19 @@ export function createSupabaseCapitalRepository(admin: AppSupabaseClient): Capit
     async transfer(userId, fromId, toId, amount) {
       const { error, status } = await admin.rpc("transfer_capital", {
         p_user_id: userId,
-        p_from_id: fromId as string,
-        p_to_id: toId as string,
+        p_from_id: fromId,
+        p_to_id: toId,
         p_amount: amount,
       });
       if (error) {
         if (
           error.message.includes("insuficiente") ||
-          error.message.includes("supera") ||
           error.message.includes("monto") ||
-          error.message.includes("iguales") ||
-          error.message.includes("capital")
+          error.message.includes("iguales")
         ) {
           throw new AppError("CONFLICT", error.message, 409);
         }
-        if (error.message.includes("no existe") || error.message.includes("no tiene capital")) {
+        if (error.message.includes("no existe")) {
           throw new AppError("NOT_FOUND", error.message, 404);
         }
         throwPostgrestError(error, "No se pudo realizar la transferencia.", status);

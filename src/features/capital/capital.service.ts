@@ -10,12 +10,6 @@ export interface CapitalView {
   capital: CapitalRow | null;
   allocations: AllocationRow[];
   totalAllocated: number;
-  available: number;
-}
-
-export interface SetCapitalInput {
-  totalCapital: number;
-  currency: string;
 }
 
 export interface CreateAllocationInput {
@@ -37,7 +31,10 @@ function sumDeposits(allocations: AllocationRow[], excludeId?: string): number {
     .reduce((acc, a) => acc + a.initialDeposit, 0);
 }
 
-/** Vista agregada del capital + asignaciones + cuánto queda disponible. */
+/**
+ * Vista agregada del capital + asignaciones. `totalCapital` es un derivado:
+ * la sumatoria del capital en cada cuenta de bróker (== `totalAllocated`).
+ */
 export async function getCapitalView(
   repo: CapitalRepository,
   userId: string,
@@ -47,30 +44,7 @@ export async function getCapitalView(
     repo.listAllocations(userId),
   ]);
   const totalAllocated = sumDeposits(allocations);
-  const available = (capital?.totalCapital ?? 0) - totalAllocated;
-  return { capital, allocations, totalAllocated, available };
-}
-
-/** Setea/actualiza el capital total. Rechaza bajarlo por debajo de lo ya asignado. */
-export async function setCapital(
-  repo: CapitalRepository,
-  userId: string,
-  input: SetCapitalInput,
-): Promise<CapitalRow> {
-  const allocations = await repo.listAllocations(userId);
-  const allocated = sumDeposits(allocations);
-  if (input.totalCapital < allocated) {
-    throw new AppError("CONFLICT", "El capital no puede ser menor a lo ya asignado.", 409);
-  }
-  const existingCurrency = allocations[0]?.currency;
-  if (existingCurrency !== undefined && existingCurrency !== input.currency) {
-    throw new AppError(
-      "CONFLICT",
-      "No se puede cambiar la moneda con asignaciones existentes.",
-      409,
-    );
-  }
-  return repo.upsertCapital(userId, { totalCapital: input.totalCapital, currency: input.currency });
+  return { capital, allocations, totalAllocated };
 }
 
 /** Crea una asignación a un broker. account_type deriva del plan elegido. */
@@ -182,12 +156,12 @@ export async function deleteAllocation(
 }
 
 export interface TransferCapitalInput {
-  fromAllocationId: string | "capital";
-  toAllocationId: string | "capital";
+  fromAllocationId: string;
+  toAllocationId: string;
   amount: number;
 }
 
-/** Transfiere capital de forma manual entre asignaciones o capital general. */
+/** Transfiere capital de forma manual entre dos cuentas de bróker del usuario. */
 export async function transferCapital(
   repo: CapitalRepository,
   userId: string,
@@ -200,12 +174,6 @@ export async function transferCapital(
       422,
     );
   }
-  if (input.fromAllocationId === "capital" && input.toAllocationId === "capital") {
-    throw new AppError("VALIDATION_ERROR", "No se puede transferir de capital a capital.", 422);
-  }
 
-  const fromId = input.fromAllocationId === "capital" ? null : input.fromAllocationId;
-  const toId = input.toAllocationId === "capital" ? null : input.toAllocationId;
-
-  await repo.transfer(userId, fromId, toId, input.amount);
+  await repo.transfer(userId, input.fromAllocationId, input.toAllocationId, input.amount);
 }
