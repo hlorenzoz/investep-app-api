@@ -192,6 +192,112 @@ describe("Tickers API", () => {
     });
   });
 
+  describe("GET /tickers/relations-overview", () => {
+    it("401 sin token", async () => {
+      const res = await createApp().request("/tickers/relations-overview", {}, ENV);
+      expect(res.status).toBe(401);
+    });
+
+    it("200 agrupa activos y sectores desde una sola query agregada", async () => {
+      mockFetch(
+        [
+          {
+            relation_type: "x2",
+            multiplier: "2.00",
+            parent: {
+              symbol: "TSLA",
+              name: "Tesla, Inc.",
+              asset_class: "stock",
+              sector: "Consumer Cyclical",
+            },
+            related: { symbol: "TSLL", name: "Direxion Daily TSLA Bull 2X Shares" },
+          },
+          {
+            relation_type: "inverso",
+            multiplier: "-1.00",
+            parent: {
+              symbol: "TSLA",
+              name: "Tesla, Inc.",
+              asset_class: "stock",
+              sector: "Consumer Cyclical",
+            },
+            related: { symbol: "TSLS", name: "Direxion Daily TSLA Bear 1X Shares" },
+          },
+          {
+            relation_type: "inverso",
+            multiplier: "-3.00",
+            parent: {
+              symbol: "XLK",
+              name: "Technology SPDR",
+              asset_class: "etf",
+              sector: "Technology",
+            },
+            related: { symbol: "TECS", name: "Direxion Daily Technology Bear 3X Shares" },
+          },
+        ],
+        200,
+      );
+
+      const res = await createApp().request(
+        "/tickers/relations-overview",
+        { headers: { Authorization: "Bearer token" } },
+        ENV,
+      );
+
+      expect(res.status).toBe(200);
+      type Link = { symbol: string; name: string; relationType: string; multiplier: number };
+      const body = (await res.json()) as {
+        assets: Array<{
+          symbol: string;
+          assetClass: string;
+          longEtfs: Link[];
+          inverseEtfs: Link[];
+        }>;
+        sectors: Array<{ etf: string; sectorName: string; inverseEtfs: Link[] }>;
+      };
+
+      expect(body.assets).toBeArrayOfSize(1);
+      expect(body.assets[0]?.symbol).toBe("TSLA");
+      expect(body.assets[0]?.assetClass).toBe("stock");
+      expect(body.assets[0]?.longEtfs).toEqual([
+        {
+          symbol: "TSLL",
+          name: "Direxion Daily TSLA Bull 2X Shares",
+          relationType: "x2",
+          multiplier: 2.0,
+        },
+      ]);
+      expect(body.assets[0]?.inverseEtfs.map((e) => e.symbol)).toEqual(["TSLS"]);
+      expect(body.assets[0]?.inverseEtfs[0]?.multiplier).toBe(-1.0);
+
+      expect(body.sectors).toBeArrayOfSize(1);
+      expect(body.sectors[0]).toEqual({
+        etf: "XLK",
+        sectorName: "Technology",
+        inverseEtfs: [
+          {
+            symbol: "TECS",
+            name: "Direxion Daily Technology Bear 3X Shares",
+            relationType: "inverso",
+            multiplier: -3.0,
+          },
+        ],
+      });
+    });
+
+    it("503 si Supabase falla", async () => {
+      mockFetch({ message: "error" }, 500);
+
+      const res = await createApp().request(
+        "/tickers/relations-overview",
+        { headers: { Authorization: "Bearer token" } },
+        ENV,
+      );
+
+      expect(res.status).toBe(503);
+    });
+  });
+
   describe("POST /admin/tickers", () => {
     it("403 si no es admin", async () => {
       mockFetch({}, 200);

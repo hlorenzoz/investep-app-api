@@ -50,6 +50,41 @@ export const TickerDetailSchema = TickerSchema.extend({
   plans: z.array(z.string()).describe("Slugs de planes en los que está incluido."),
 }).openapi("TickerDetail");
 
+export const AssetRelationRowSchema = z
+  .object({
+    symbol: z.string().openapi({ example: "TSLA" }),
+    name: z.string().openapi({ example: "Tesla, Inc." }),
+    assetClass: z.enum(["stock", "index"]).openapi({ example: "stock" }),
+    longEtfs: z
+      .array(TickerRelationInfoSchema)
+      .describe("ETFs apalancados/long (multiplier > 0), ordenados por ABS(multiplier) asc."),
+    inverseEtfs: z
+      .array(TickerRelationInfoSchema)
+      .describe("ETFs inversos (multiplier < 0), ordenados por ABS(multiplier) asc."),
+  })
+  .openapi("AssetRelationRow");
+
+export const SectorRelationRowSchema = z
+  .object({
+    etf: z.string().openapi({ example: "XLK" }),
+    sectorName: z.string().openapi({ example: "Technology" }),
+    inverseEtfs: z
+      .array(TickerRelationInfoSchema)
+      .describe("ETFs inversos del sector, ordenados por ABS(multiplier) asc."),
+  })
+  .openapi("SectorRelationRow");
+
+export const RelationsOverviewSchema = z
+  .object({
+    assets: z
+      .array(AssetRelationRowSchema)
+      .describe("Activos base (stock/index) con al menos una relación."),
+    sectors: z
+      .array(SectorRelationRowSchema)
+      .describe("ETFs sectoriales con al menos una relación inversa."),
+  })
+  .openapi("RelationsOverview");
+
 export const ListTickersQuerySchema = z.object({
   q: z.string().optional().openapi({ description: "Búsqueda por símbolo o nombre." }),
   assetClass: AssetClassEnum.optional().openapi({ description: "Filtrar por clase de activo." }),
@@ -180,6 +215,27 @@ export const listTickersRoute = createRoute({
     200: {
       content: { "application/json": { schema: TickersPaginatedResponseSchema } },
       description: "Lista paginada de activos.",
+    },
+    401: jsonErrorResponse("Falta o es inválido el token (`UNAUTHORIZED`)."),
+    503: jsonErrorResponse("Supabase no disponible (`SERVICE_UNAVAILABLE`)."),
+  },
+});
+
+// GET /tickers/relations-overview
+export const relationsOverviewRoute = createRoute({
+  method: "get",
+  path: "/relations-overview",
+  tags: ["Tickers"],
+  summary: "Vista de referencia de relaciones entre activos",
+  description:
+    "Devuelve, en una sola consulta agregada, las relaciones entre activos: activos base " +
+    "(stock/index) con sus ETFs apalancados e inversos, y ETFs sectoriales con sus ETFs inversos. " +
+    "Autenticado, sin filtro de plan.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      content: { "application/json": { schema: RelationsOverviewSchema } },
+      description: "Vista agregada de relaciones entre activos.",
     },
     401: jsonErrorResponse("Falta o es inválido el token (`UNAUTHORIZED`)."),
     503: jsonErrorResponse("Supabase no disponible (`SERVICE_UNAVAILABLE`)."),
@@ -380,6 +436,7 @@ export const disassociatePlanRoute = createRoute({
 });
 
 export type ListTickersRoute = typeof listTickersRoute;
+export type RelationsOverviewRoute = typeof relationsOverviewRoute;
 export type GetTickerRoute = typeof getTickerRoute;
 export type CreateTickerRoute = typeof createTickerRoute;
 export type UpdateTickerRoute = typeof updateTickerRoute;

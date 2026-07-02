@@ -27,6 +27,30 @@ export interface TickerRelationInfo {
   multiplier: number;
 }
 
+/** Referencia mínima a un ticker relacionado embebido en una query de relaciones. */
+export interface RelatedTickerRef {
+  symbol: string;
+  name: string;
+}
+
+/**
+ * Mapea una fila cruda de relación (tipo + multiplier + ticker relacionado) al link
+ * camelCase. Fuente única de verdad del shape de relación, compartida por
+ * `getTickerDetail` y `getRelationsOverview`.
+ */
+export function mapRelationLink(
+  relationType: string,
+  multiplier: string | number,
+  related: RelatedTickerRef | null,
+): TickerRelationInfo {
+  return {
+    symbol: related?.symbol ?? "",
+    name: related?.name ?? "",
+    relationType: relationType as RelationType,
+    multiplier: Number(multiplier),
+  };
+}
+
 export type AssetClass = "stock" | "etf" | "index" | "crypto" | "commodity" | "currency";
 
 export interface TickerView {
@@ -185,7 +209,7 @@ export async function listTickers(
 interface RelationQueryRow {
   relation_type: string;
   multiplier: string | number;
-  related_ticker: { symbol: string; name: string } | null;
+  related_ticker: RelatedTickerRef | null;
 }
 
 interface PlanQueryRow {
@@ -222,12 +246,9 @@ export async function getTickerDetail(
   if (!data) return null;
 
   // Formatear relaciones
-  const relations = ((data.ticker_relations as unknown as RelationQueryRow[]) ?? []).map((r) => ({
-    symbol: r.related_ticker?.symbol ?? "",
-    name: r.related_ticker?.name ?? "",
-    relationType: r.relation_type as RelationType,
-    multiplier: Number(r.multiplier),
-  }));
+  const relations = ((data.ticker_relations as unknown as RelationQueryRow[]) ?? []).map((r) =>
+    mapRelationLink(r.relation_type, r.multiplier, r.related_ticker),
+  );
 
   // Formatear planes asociados
   const plans = ((data.investep_plan_tickers as unknown as PlanQueryRow[]) ?? [])
@@ -239,6 +260,134 @@ export async function getTickerDetail(
     relations,
     plans,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Vista de referencia de relaciones (GET /tickers/relations-overview)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fila de activo base (stock/index) con sus ETFs apalancados e inversos agrupados.
+ * Cada link reutiliza `TickerRelationInfo` (mismo shape que `relations` de GET /tickers/{symbol}).
+ */
+export interface AssetRelationRow {
+  symbol: string;
+  name: string;
+  assetClass: "stock" | "index";
+  longEtfs: TickerRelationInfo[];
+  inverseEtfs: TickerRelationInfo[];
+}
+
+/** Fila de ETF sectorial con sus ETFs inversos agrupados. */
+export interface SectorRelationRow {
+  etf: string;
+  sectorName: string;
+  inverseEtfs: TickerRelationInfo[];
+}
+
+export interface RelationsOverview {
+  assets: AssetRelationRow[];
+  sectors: SectorRelationRow[];
+}
+
+/**
+ * Fila cruda de la query agregada sobre `ticker_relations`, con el ticker padre
+ * y el relacionado embebidos en un solo JOIN (evita N+1).
+ */
+export interface OverviewRelationRow {
+  relation_type: string;
+  multiplier: string | number;
+  parent: { symbol: string; name: string; asset_class: string; sector: string | null } | null;
+  related: RelatedTickerRef | null;
+}
+
+/** Una relación es inversa si su tipo es 'inverso' o su multiplicador es negativo. */
+function isInverseRelation(relationType: string, multiplier: number): boolean {
+  return relationType === "inverso" || multiplier < 0;
+}
+
+/** Ordena un array de links in-place: ABS(multiplier) asc, luego symbol asc. */
+function sortLinks(links: TickerRelationInfo[]): void {
+  links.sort(
+    (a, b) => Math.abs(a.multiplier) - Math.abs(b.multiplier) || a.symbol.localeCompare(b.symbol),
+  );
+}
+
+/**
+ * Agrupa en memoria las filas planas de relaciones en la vista de referencia.
+ * Función pura: separada del acceso a datos para testear la lógica de agrupación.
+ *
+ * - `assets`: parents con asset_class 'stock' o 'index'; `inverseEtfs` = relaciones
+ *   inversas (multiplier < 0), `longEtfs` = el resto (multiplier > 0).
+ * - `sectors`: parents con asset_class 'etf' y sector no nulo, solo sus relaciones inversas.
+ */
+export function buildRelationsOverview(rows: OverviewRelationRow[]): RelationsOverview {
+  const assets = new Map<string, AssetRelationRow>();
+  const sectors = new Map<string, SectorRelationRow>();
+
+  for (const row of rows) {
+    const { parent, related } = row;
+    if (!parent || !related) continue;
+
+    const link = mapRelationLink(row.relation_type, row.multiplier, related);
+    const inverse = isInverseRelation(row.relation_type, link.multiplier);
+
+    if (parent.asset_class === "stock" || parent.asset_class === "index") {
+      let asset = assets.get(parent.symbol);
+      if (!asset) {
+        asset = {
+          symbol: parent.symbol,
+          name: parent.name,
+          assetClass: parent.asset_class,
+          longEtfs: [],
+          inverseEtfs: [],
+        };
+        assets.set(parent.symbol, asset);
+      }
+      (inverse ? asset.inverseEtfs : asset.longEtfs).push(link);
+    } else if (parent.asset_class === "etf" && parent.sector && inverse) {
+      let sector = sectors.get(parent.symbol);
+      if (!sector) {
+        sector = { etf: parent.symbol, sectorName: parent.sector, inverseEtfs: [] };
+        sectors.set(parent.symbol, sector);
+      }
+      sector.inverseEtfs.push(link);
+    }
+  }
+
+  const assetRows = [...assets.values()].sort((a, b) => a.symbol.localeCompare(b.symbol));
+  for (const asset of assetRows) {
+    sortLinks(asset.longEtfs);
+    sortLinks(asset.inverseEtfs);
+  }
+
+  const sectorRows = [...sectors.values()].sort(
+    (a, b) => a.sectorName.localeCompare(b.sectorName) || a.etf.localeCompare(b.etf),
+  );
+  for (const sector of sectorRows) {
+    sortLinks(sector.inverseEtfs);
+  }
+
+  return { assets: assetRows, sectors: sectorRows };
+}
+
+/**
+ * Vista de referencia de relaciones entre activos, en una sola query agregada
+ * con JOIN (parent + related) y agrupación en memoria. Sin N+1, sin filtro de plan.
+ */
+export async function getRelationsOverview(admin: AppSupabaseClient): Promise<RelationsOverview> {
+  const { data, error, status } = await admin.from("ticker_relations").select(`
+      relation_type,
+      multiplier,
+      parent:tickers!ticker_relations_parent_ticker_id_fkey(symbol, name, asset_class, sector),
+      related:tickers!ticker_relations_related_ticker_id_fkey(symbol, name)
+    `);
+
+  if (error) {
+    throwPostgrestError(error, "No se pudieron obtener las relaciones entre activos.", status);
+  }
+
+  return buildRelationsOverview((data as unknown as OverviewRelationRow[]) ?? []);
 }
 
 /** Crear un activo */

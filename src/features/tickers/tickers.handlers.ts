@@ -11,6 +11,7 @@ import type {
   DisassociateRelationRoute,
   GetTickerRoute,
   ListTickersRoute,
+  RelationsOverviewRoute,
   UpdateTickerRoute,
 } from "./tickers.routes";
 import {
@@ -20,6 +21,7 @@ import {
   deleteTicker,
   disassociatePlan,
   disassociateRelation,
+  getRelationsOverview,
   getTickerDetail,
   listTickers,
   updateTicker,
@@ -50,6 +52,16 @@ export const getTickerHandler: RouteHandler<GetTickerRoute, AuthedBindings> = as
   }
 
   return c.json(ticker, 200);
+};
+
+/** GET /tickers/relations-overview — Vista de referencia de relaciones entre activos */
+export const relationsOverviewHandler: RouteHandler<
+  RelationsOverviewRoute,
+  AuthedBindings
+> = async (c) => {
+  const admin = createSupabaseAdminClient(c.env);
+  const overview = await getRelationsOverview(admin);
+  return c.json(overview, 200);
 };
 
 /** POST /admin/tickers — Crear un activo */

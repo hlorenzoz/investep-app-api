@@ -12,6 +12,7 @@ import {
   disassociateRelationHandler,
   getTickerHandler,
   listTickersHandler,
+  relationsOverviewHandler,
   updateTickerHandler,
 } from "./tickers.handlers";
 import {
@@ -23,6 +24,7 @@ import {
   disassociateRelationRoute,
   getTickerRoute,
   listTickersRoute,
+  relationsOverviewRoute,
   updateTickerRoute,
 } from "./tickers.routes";
 
@@ -36,6 +38,8 @@ export const tickersRouter = new OpenAPIHono<AuthedBindings>({
 
 tickersRouter.use("*", requireAuth);
 tickersRouter.openapi(listTickersRoute, listTickersHandler);
+// Ruta estática ANTES de la paramétrica `/{symbol}` para que no la capture como símbolo.
+tickersRouter.openapi(relationsOverviewRoute, relationsOverviewHandler);
 tickersRouter.openapi(getTickerRoute, getTickerHandler);
 
 /**
