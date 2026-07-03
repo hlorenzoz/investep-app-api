@@ -1,5 +1,6 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { jsonErrorResponse } from "../../lib/openapi";
+import { tickerSymbolSchema } from "../../schemas/common";
 
 export const AssetClassEnum = z.enum(["stock", "etf", "index", "crypto", "commodity", "currency"]);
 export const RelationTypeEnum = z.enum(["x2", "x3", "inverso"]);
@@ -36,16 +37,27 @@ export const TickerSchema = z
   })
   .openapi("Ticker");
 
+const isFavoriteField = z.boolean().openapi({
+  description: "Si el usuario autenticado marcó este activo como favorito.",
+  example: true,
+});
+
 export const TickerRelationInfoSchema = z
   .object({
     symbol: z.string().openapi({ example: "TSLL" }),
     name: z.string().openapi({ example: "Direxion Daily TSLA Bull 2X Shares" }),
     relationType: RelationTypeEnum.openapi({ example: "x2" }),
     multiplier: z.number().openapi({ example: 2.0 }),
+    isFavorite: isFavoriteField,
   })
   .openapi("TickerRelationInfo");
 
-export const TickerDetailSchema = TickerSchema.extend({
+/** Ticker con el flag de favorito del usuario, para las respuestas de lectura. */
+export const FavoritableTickerSchema = TickerSchema.extend({
+  isFavorite: isFavoriteField,
+}).openapi("FavoritableTicker");
+
+export const TickerDetailSchema = FavoritableTickerSchema.extend({
   relations: z.array(TickerRelationInfoSchema).describe("Activos relacionados directos."),
   plans: z.array(z.string()).describe("Slugs de planes en los que está incluido."),
 }).openapi("TickerDetail");
@@ -55,6 +67,7 @@ export const AssetRelationRowSchema = z
     symbol: z.string().openapi({ example: "TSLA" }),
     name: z.string().openapi({ example: "Tesla, Inc." }),
     assetClass: z.enum(["stock", "index"]).openapi({ example: "stock" }),
+    isFavorite: isFavoriteField,
     longEtfs: z
       .array(TickerRelationInfoSchema)
       .describe("ETFs apalancados/long (multiplier > 0), ordenados por ABS(multiplier) asc."),
@@ -68,6 +81,7 @@ export const SectorRelationRowSchema = z
   .object({
     etf: z.string().openapi({ example: "XLK" }),
     sectorName: z.string().openapi({ example: "Technology" }),
+    isFavorite: isFavoriteField,
     inverseEtfs: z
       .array(TickerRelationInfoSchema)
       .describe("ETFs inversos del sector, ordenados por ABS(multiplier) asc."),
@@ -93,6 +107,14 @@ export const ListTickersQuerySchema = z.object({
     .string()
     .optional()
     .openapi({ description: "Filtrar activos incluidos en un plan de Investep." }),
+  favorite: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true")
+    .openapi({
+      description:
+        "Si es `true`, devuelve solo los activos favoritos del usuario. `false` u omitido → catálogo completo.",
+    }),
   page: z.coerce
     .number()
     .int()
@@ -111,7 +133,7 @@ export const ListTickersQuerySchema = z.object({
 
 export const TickersPaginatedResponseSchema = z
   .object({
-    tickers: z.array(TickerSchema),
+    tickers: z.array(FavoritableTickerSchema),
     pagination: z.object({
       page: z.number(),
       limit: z.number(),
@@ -122,13 +144,7 @@ export const TickersPaginatedResponseSchema = z
 
 export const CreateTickerSchema = z
   .object({
-    symbol: z
-      .string()
-      .trim()
-      .toUpperCase()
-      .min(1)
-      .regex(/^[A-Z0-9.-]+$/, "Símbolo de activo inválido (solo A-Z, 0-9, . o -).")
-      .openapi({ example: "TSLA" }),
+    symbol: tickerSymbolSchema.openapi({ example: "TSLA" }),
     name: z.string().trim().min(1).openapi({ example: "Tesla, Inc." }),
     assetClass: AssetClassEnum.default("stock"),
     exchange: z.string().optional(),
@@ -259,6 +275,47 @@ export const getTickerRoute = createRoute({
     },
     401: jsonErrorResponse("Falta o es inválido el token (`UNAUTHORIZED`)."),
     404: jsonErrorResponse("El activo no existe (`NOT_FOUND`)."),
+    503: jsonErrorResponse("Supabase no disponible (`SERVICE_UNAVAILABLE`)."),
+  },
+});
+
+// PUT /tickers/{symbol}/favorite
+export const addFavoriteRoute = createRoute({
+  method: "put",
+  path: "/{symbol}/favorite",
+  tags: ["Tickers"],
+  summary: "Marcar un activo como favorito",
+  description: "Marca el activo como favorito del usuario autenticado. Idempotente.",
+  security: [{ bearerAuth: [] }],
+  request: { params: TickerSymbolParamSchema },
+  responses: {
+    200: {
+      content: { "application/json": { schema: z.object({ favorite: z.literal(true) }) } },
+      description: "Activo marcado como favorito.",
+    },
+    401: jsonErrorResponse("Falta o es inválido el token (`UNAUTHORIZED`)."),
+    404: jsonErrorResponse("El activo no existe (`NOT_FOUND`)."),
+    503: jsonErrorResponse("Supabase no disponible (`SERVICE_UNAVAILABLE`)."),
+  },
+});
+
+// DELETE /tickers/{symbol}/favorite
+export const removeFavoriteRoute = createRoute({
+  method: "delete",
+  path: "/{symbol}/favorite",
+  tags: ["Tickers"],
+  summary: "Quitar un activo de favoritos",
+  description:
+    "Quita el activo de los favoritos del usuario autenticado. Idempotente: si el símbolo no " +
+    "existe o no estaba en favoritos, igual devuelve 200 (el estado final ya se cumple).",
+  security: [{ bearerAuth: [] }],
+  request: { params: TickerSymbolParamSchema },
+  responses: {
+    200: {
+      content: { "application/json": { schema: z.object({ favorite: z.literal(false) }) } },
+      description: "Activo quitado de favoritos (o ya no lo era).",
+    },
+    401: jsonErrorResponse("Falta o es inválido el token (`UNAUTHORIZED`)."),
     503: jsonErrorResponse("Supabase no disponible (`SERVICE_UNAVAILABLE`)."),
   },
 });
@@ -438,6 +495,8 @@ export const disassociatePlanRoute = createRoute({
 export type ListTickersRoute = typeof listTickersRoute;
 export type RelationsOverviewRoute = typeof relationsOverviewRoute;
 export type GetTickerRoute = typeof getTickerRoute;
+export type AddFavoriteRoute = typeof addFavoriteRoute;
+export type RemoveFavoriteRoute = typeof removeFavoriteRoute;
 export type CreateTickerRoute = typeof createTickerRoute;
 export type UpdateTickerRoute = typeof updateTickerRoute;
 export type DeleteTickerRoute = typeof deleteTickerRoute;

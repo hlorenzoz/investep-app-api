@@ -4,6 +4,7 @@ import { requireAdmin } from "../../middleware/admin";
 import { requireAuth } from "../../middleware/auth";
 import type { AuthedBindings } from "../../types/app";
 import {
+  addFavoriteHandler,
   associatePlanHandler,
   associateRelationHandler,
   createTickerHandler,
@@ -13,9 +14,11 @@ import {
   getTickerHandler,
   listTickersHandler,
   relationsOverviewHandler,
+  removeFavoriteHandler,
   updateTickerHandler,
 } from "./tickers.handlers";
 import {
+  addFavoriteRoute,
   associatePlanRoute,
   associateRelationRoute,
   createTickerRoute,
@@ -25,6 +28,7 @@ import {
   getTickerRoute,
   listTickersRoute,
   relationsOverviewRoute,
+  removeFavoriteRoute,
   updateTickerRoute,
 } from "./tickers.routes";
 
@@ -40,6 +44,9 @@ tickersRouter.use("*", requireAuth);
 tickersRouter.openapi(listTickersRoute, listTickersHandler);
 // Ruta estática ANTES de la paramétrica `/{symbol}` para que no la capture como símbolo.
 tickersRouter.openapi(relationsOverviewRoute, relationsOverviewHandler);
+// Favoritos: `/{symbol}/favorite` es más específica que `/{symbol}`, se registra antes.
+tickersRouter.openapi(addFavoriteRoute, addFavoriteHandler);
+tickersRouter.openapi(removeFavoriteRoute, removeFavoriteHandler);
 tickersRouter.openapi(getTickerRoute, getTickerHandler);
 
 /**

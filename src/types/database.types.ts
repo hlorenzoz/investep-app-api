@@ -769,6 +769,32 @@ export type Database = {
         }
         Relationships: []
       }
+      user_ticker_favorites: {
+        Row: {
+          created_at: string
+          ticker_id: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          ticker_id: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          ticker_id?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_ticker_favorites_ticker_id_fkey"
+            columns: ["ticker_id"]
+            isOneToOne: false
+            referencedRelation: "tickers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

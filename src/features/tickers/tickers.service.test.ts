@@ -32,7 +32,18 @@ describe("mapRelationLink", () => {
       name: "Tech Bear 3X",
       relationType: "inverso",
       multiplier: -3.0,
+      isFavorite: false,
     });
+  });
+
+  it("marca isFavorite cuando el símbolo relacionado está en el set de favoritos", () => {
+    const link = mapRelationLink(
+      "x2",
+      "2.00",
+      { symbol: "TSLL", name: "TSLA Bull 2X" },
+      new Set(["TSLL"]),
+    );
+    expect(link.isFavorite).toBe(true);
   });
 
   it("acepta multiplier numérico", () => {
@@ -45,6 +56,7 @@ describe("mapRelationLink", () => {
       name: "",
       relationType: "x2",
       multiplier: 1.0,
+      isFavorite: false,
     });
   });
 });
@@ -66,6 +78,7 @@ describe("buildRelationsOverview — assets", () => {
       name: "TSLL Name",
       relationType: "x2",
       multiplier: 2.0,
+      isFavorite: false,
     });
     expect(assets[0]?.inverseEtfs[0]?.multiplier).toBe(-1.0);
   });
@@ -128,8 +141,15 @@ describe("buildRelationsOverview — sectors", () => {
     expect(sectors[0]).toEqual({
       etf: "XLK",
       sectorName: "Technology",
+      isFavorite: false,
       inverseEtfs: [
-        { symbol: "TECS", name: "TECS Name", relationType: "inverso", multiplier: -3.0 },
+        {
+          symbol: "TECS",
+          name: "TECS Name",
+          relationType: "inverso",
+          multiplier: -3.0,
+          isFavorite: false,
+        },
       ],
     });
   });

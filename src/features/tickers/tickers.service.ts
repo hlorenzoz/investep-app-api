@@ -9,11 +9,15 @@ import type { Database } from "../../types/database.types";
 
 type TickerRow = Database["public"]["Tables"]["tickers"]["Row"];
 
+/** Conjunto vacío reutilizable para las anotaciones de favoritos sin favoritos. */
+const EMPTY_FAVORITES: ReadonlySet<string> = new Set();
+
 export interface ListTickersOptions {
   q?: string;
   assetClass?: string;
   sector?: string;
   planSlug?: string;
+  favorite?: boolean;
   page?: number;
   limit?: number;
 }
@@ -25,6 +29,7 @@ export interface TickerRelationInfo {
   name: string;
   relationType: RelationType;
   multiplier: number;
+  isFavorite: boolean;
 }
 
 /** Referencia mínima a un ticker relacionado embebido en una query de relaciones. */
@@ -42,12 +47,15 @@ export function mapRelationLink(
   relationType: string,
   multiplier: string | number,
   related: RelatedTickerRef | null,
+  favoriteSymbols: ReadonlySet<string> = EMPTY_FAVORITES,
 ): TickerRelationInfo {
+  const symbol = related?.symbol ?? "";
   return {
-    symbol: related?.symbol ?? "",
+    symbol,
     name: related?.name ?? "",
     relationType: relationType as RelationType,
     multiplier: Number(multiplier),
+    isFavorite: favoriteSymbols.has(symbol),
   };
 }
 
@@ -81,7 +89,13 @@ export interface TickerView {
   updatedAt: string;
 }
 
-export interface TickerDetail extends TickerView {
+/** Ticker con el flag de favorito del usuario. Solo en respuestas de lectura de usuario;
+ * las respuestas de catálogo admin usan `TickerView` puro (sin `isFavorite`). */
+export interface FavoritableTicker extends TickerView {
+  isFavorite: boolean;
+}
+
+export interface TickerDetail extends FavoritableTicker {
   relations: TickerRelationInfo[];
   plans: string[];
 }
@@ -155,8 +169,9 @@ function mapInputToRow(input: Record<string, unknown>): Record<string, unknown> 
 /** Listar y buscar activos con filtros y paginación */
 export async function listTickers(
   admin: AppSupabaseClient,
+  userId: string,
   options: ListTickersOptions = {},
-): Promise<{ tickers: TickerView[]; total: number; page: number; limit: number }> {
+): Promise<{ tickers: FavoritableTicker[]; total: number; page: number; limit: number }> {
   const page = options.page ?? 1;
   const limit = options.limit ?? 20;
   const from = (page - 1) * limit;
@@ -191,19 +206,36 @@ export async function listTickers(
   // Ordenar alfabéticamente por símbolo
   query = query.order("symbol", { ascending: true });
 
-  const { data, count, error, status } = await query.range(from, to);
-
-  if (error) {
-    throwPostgrestError(error, "No se pudieron obtener los activos.", status);
-  }
-
-  const tickers = ((data as unknown as TickerRow[]) ?? []).map(mapRowToTicker);
-  return {
-    tickers,
+  const buildResult = (data: unknown, count: number | null, favoriteSymbols: Set<string>) => ({
+    tickers: ((data as unknown as TickerRow[]) ?? []).map((row) => ({
+      ...mapRowToTicker(row),
+      isFavorite: favoriteSymbols.has(row.symbol),
+    })),
     total: count ?? 0,
     page,
     limit,
-  };
+  });
+
+  // Con el filtro `favorite`, los favoritos se necesitan ANTES para armar el `.in()`; sin él,
+  // el catálogo y los favoritos (solo para anotar) van en paralelo — un único round-trip.
+  if (options.favorite) {
+    const favoriteSymbols = await getFavoriteSymbols(admin, userId);
+    if (favoriteSymbols.size === 0) {
+      return { tickers: [], total: 0, page, limit };
+    }
+    const { data, count, error, status } = await query
+      .in("symbol", [...favoriteSymbols])
+      .range(from, to);
+    if (error) throwPostgrestError(error, "No se pudieron obtener los activos.", status);
+    return buildResult(data, count, favoriteSymbols);
+  }
+
+  const [{ data, count, error, status }, favoriteSymbols] = await Promise.all([
+    query.range(from, to),
+    getFavoriteSymbols(admin, userId),
+  ]);
+  if (error) throwPostgrestError(error, "No se pudieron obtener los activos.", status);
+  return buildResult(data, count, favoriteSymbols);
 }
 
 interface RelationQueryRow {
@@ -219,13 +251,15 @@ interface PlanQueryRow {
 /** Obtener el detalle de un activo por símbolo (mayúsculas) */
 export async function getTickerDetail(
   admin: AppSupabaseClient,
+  userId: string,
   symbol: string,
 ): Promise<TickerDetail | null> {
   const symbolUpper = symbol.toUpperCase();
 
-  const { data, error, status } = await admin
-    .from("tickers")
-    .select(`
+  const [{ data, error, status }, favoriteSymbols] = await Promise.all([
+    admin
+      .from("tickers")
+      .select(`
       *,
       ticker_relations!ticker_relations_parent_ticker_id_fkey(
         relation_type,
@@ -236,8 +270,10 @@ export async function getTickerDetail(
         investep_plans(slug)
       )
     `)
-    .eq("symbol", symbolUpper)
-    .maybeSingle();
+      .eq("symbol", symbolUpper)
+      .maybeSingle(),
+    getFavoriteSymbols(admin, userId),
+  ]);
 
   if (error) {
     throwPostgrestError(error, "No se pudo obtener el activo.", status);
@@ -245,9 +281,9 @@ export async function getTickerDetail(
 
   if (!data) return null;
 
-  // Formatear relaciones
+  // Formatear relaciones (con isFavorite del ticker relacionado)
   const relations = ((data.ticker_relations as unknown as RelationQueryRow[]) ?? []).map((r) =>
-    mapRelationLink(r.relation_type, r.multiplier, r.related_ticker),
+    mapRelationLink(r.relation_type, r.multiplier, r.related_ticker, favoriteSymbols),
   );
 
   // Formatear planes asociados
@@ -255,11 +291,8 @@ export async function getTickerDetail(
     .map((ipt) => ipt.investep_plans?.slug ?? "")
     .filter(Boolean);
 
-  return {
-    ...mapRowToTicker(data as unknown as TickerRow),
-    relations,
-    plans,
-  };
+  const ticker = mapRowToTicker(data as unknown as TickerRow);
+  return { ...ticker, isFavorite: favoriteSymbols.has(ticker.symbol), relations, plans };
 }
 
 // ---------------------------------------------------------------------------
@@ -274,6 +307,7 @@ export interface AssetRelationRow {
   symbol: string;
   name: string;
   assetClass: "stock" | "index";
+  isFavorite: boolean;
   longEtfs: TickerRelationInfo[];
   inverseEtfs: TickerRelationInfo[];
 }
@@ -282,6 +316,7 @@ export interface AssetRelationRow {
 export interface SectorRelationRow {
   etf: string;
   sectorName: string;
+  isFavorite: boolean;
   inverseEtfs: TickerRelationInfo[];
 }
 
@@ -321,7 +356,10 @@ function sortLinks(links: TickerRelationInfo[]): void {
  *   inversas (multiplier < 0), `longEtfs` = el resto (multiplier > 0).
  * - `sectors`: parents con asset_class 'etf' y sector no nulo, solo sus relaciones inversas.
  */
-export function buildRelationsOverview(rows: OverviewRelationRow[]): RelationsOverview {
+export function buildRelationsOverview(
+  rows: OverviewRelationRow[],
+  favoriteSymbols: ReadonlySet<string> = EMPTY_FAVORITES,
+): RelationsOverview {
   const assets = new Map<string, AssetRelationRow>();
   const sectors = new Map<string, SectorRelationRow>();
 
@@ -329,7 +367,7 @@ export function buildRelationsOverview(rows: OverviewRelationRow[]): RelationsOv
     const { parent, related } = row;
     if (!parent || !related) continue;
 
-    const link = mapRelationLink(row.relation_type, row.multiplier, related);
+    const link = mapRelationLink(row.relation_type, row.multiplier, related, favoriteSymbols);
     const inverse = isInverseRelation(row.relation_type, link.multiplier);
 
     if (parent.asset_class === "stock" || parent.asset_class === "index") {
@@ -339,6 +377,7 @@ export function buildRelationsOverview(rows: OverviewRelationRow[]): RelationsOv
           symbol: parent.symbol,
           name: parent.name,
           assetClass: parent.asset_class,
+          isFavorite: favoriteSymbols.has(parent.symbol),
           longEtfs: [],
           inverseEtfs: [],
         };
@@ -348,7 +387,12 @@ export function buildRelationsOverview(rows: OverviewRelationRow[]): RelationsOv
     } else if (parent.asset_class === "etf" && parent.sector && inverse) {
       let sector = sectors.get(parent.symbol);
       if (!sector) {
-        sector = { etf: parent.symbol, sectorName: parent.sector, inverseEtfs: [] };
+        sector = {
+          etf: parent.symbol,
+          sectorName: parent.sector,
+          isFavorite: favoriteSymbols.has(parent.symbol),
+          inverseEtfs: [],
+        };
         sectors.set(parent.symbol, sector);
       }
       sector.inverseEtfs.push(link);
@@ -375,19 +419,25 @@ export function buildRelationsOverview(rows: OverviewRelationRow[]): RelationsOv
  * Vista de referencia de relaciones entre activos, en una sola query agregada
  * con JOIN (parent + related) y agrupación en memoria. Sin N+1, sin filtro de plan.
  */
-export async function getRelationsOverview(admin: AppSupabaseClient): Promise<RelationsOverview> {
-  const { data, error, status } = await admin.from("ticker_relations").select(`
+export async function getRelationsOverview(
+  admin: AppSupabaseClient,
+  userId: string,
+): Promise<RelationsOverview> {
+  const [{ data, error, status }, favoriteSymbols] = await Promise.all([
+    admin.from("ticker_relations").select(`
       relation_type,
       multiplier,
       parent:tickers!ticker_relations_parent_ticker_id_fkey(symbol, name, asset_class, sector),
       related:tickers!ticker_relations_related_ticker_id_fkey(symbol, name)
-    `);
+    `),
+    getFavoriteSymbols(admin, userId),
+  ]);
 
   if (error) {
     throwPostgrestError(error, "No se pudieron obtener las relaciones entre activos.", status);
   }
 
-  return buildRelationsOverview((data as unknown as OverviewRelationRow[]) ?? []);
+  return buildRelationsOverview((data as unknown as OverviewRelationRow[]) ?? [], favoriteSymbols);
 }
 
 /** Crear un activo */
@@ -575,5 +625,90 @@ export async function disassociatePlan(
 
   if (count === 0) {
     throw new AppError("NOT_FOUND", "La asociación no existe.", 404);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Favoritos por usuario
+// ---------------------------------------------------------------------------
+
+interface FavoriteRow {
+  ticker: { symbol: string } | null;
+}
+
+/**
+ * Devuelve el conjunto de símbolos que el usuario marcó como favoritos.
+ * Una sola query; se usa para anotar `isFavorite` en list/detail/overview.
+ */
+export async function getFavoriteSymbols(
+  admin: AppSupabaseClient,
+  userId: string,
+): Promise<Set<string>> {
+  const { data, error, status } = await admin
+    .from("user_ticker_favorites")
+    .select("ticker:tickers(symbol)")
+    .eq("user_id", userId);
+  if (error) {
+    throwPostgrestError(error, "No se pudieron obtener los favoritos.", status);
+  }
+  const rows = (Array.isArray(data) ? data : []) as unknown as FavoriteRow[];
+  return new Set(rows.map((r) => r.ticker?.symbol).filter((s): s is string => Boolean(s)));
+}
+
+/** Resuelve el id de un ticker por su símbolo (mayúsculas), o null si no existe. */
+async function findTickerIdBySymbol(
+  admin: AppSupabaseClient,
+  symbol: string,
+): Promise<number | null> {
+  const { data, error, status } = await admin
+    .from("tickers")
+    .select("id")
+    .eq("symbol", symbol.toUpperCase())
+    .maybeSingle();
+  if (error) {
+    throwPostgrestError(error, "No se pudo leer el activo.", status);
+  }
+  return data?.id ?? null;
+}
+
+/** Marca un activo como favorito del usuario (idempotente). 404 si el símbolo no existe. */
+export async function setFavorite(
+  admin: AppSupabaseClient,
+  userId: string,
+  symbol: string,
+): Promise<void> {
+  // El insert necesita el id (FK), así que acá el ticker DEBE existir.
+  const tickerId = await findTickerIdBySymbol(admin, symbol);
+  if (tickerId === null) {
+    throw new AppError("NOT_FOUND", "El activo no existe.", 404);
+  }
+  const { error, status } = await admin
+    .from("user_ticker_favorites")
+    .upsert({ user_id: userId, ticker_id: tickerId }, { onConflict: "user_id,ticker_id" });
+  if (error) {
+    throwPostgrestError(error, "No se pudo marcar el favorito.", status);
+  }
+}
+
+/**
+ * Quita un activo de los favoritos del usuario. Idempotente: si el símbolo no existe
+ * (o no estaba en favoritos), es un no-op exitoso — el estado final "no favorito" ya se cumple.
+ */
+export async function unsetFavorite(
+  admin: AppSupabaseClient,
+  userId: string,
+  symbol: string,
+): Promise<void> {
+  const tickerId = await findTickerIdBySymbol(admin, symbol);
+  if (tickerId === null) {
+    return;
+  }
+  const { error, status } = await admin
+    .from("user_ticker_favorites")
+    .delete()
+    .eq("user_id", userId)
+    .eq("ticker_id", tickerId);
+  if (error) {
+    throwPostgrestError(error, "No se pudo quitar el favorito.", status);
   }
 }

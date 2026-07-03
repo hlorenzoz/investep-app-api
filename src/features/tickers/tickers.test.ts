@@ -165,6 +165,7 @@ describe("Tickers API", () => {
           name: string;
           relationType: string;
           multiplier: number;
+          isFavorite: boolean;
         }>;
         plans: string[];
       };
@@ -175,6 +176,7 @@ describe("Tickers API", () => {
         name: "TSLA Bull 2X",
         relationType: "x2",
         multiplier: 2.0,
+        isFavorite: false,
       });
       expect(body.plans).toEqual(["gold"]);
     });
@@ -245,15 +247,27 @@ describe("Tickers API", () => {
       );
 
       expect(res.status).toBe(200);
-      type Link = { symbol: string; name: string; relationType: string; multiplier: number };
+      type Link = {
+        symbol: string;
+        name: string;
+        relationType: string;
+        multiplier: number;
+        isFavorite: boolean;
+      };
       const body = (await res.json()) as {
         assets: Array<{
           symbol: string;
           assetClass: string;
+          isFavorite: boolean;
           longEtfs: Link[];
           inverseEtfs: Link[];
         }>;
-        sectors: Array<{ etf: string; sectorName: string; inverseEtfs: Link[] }>;
+        sectors: Array<{
+          etf: string;
+          sectorName: string;
+          isFavorite: boolean;
+          inverseEtfs: Link[];
+        }>;
       };
 
       expect(body.assets).toBeArrayOfSize(1);
@@ -265,6 +279,7 @@ describe("Tickers API", () => {
           name: "Direxion Daily TSLA Bull 2X Shares",
           relationType: "x2",
           multiplier: 2.0,
+          isFavorite: false,
         },
       ]);
       expect(body.assets[0]?.inverseEtfs.map((e) => e.symbol)).toEqual(["TSLS"]);
@@ -274,12 +289,14 @@ describe("Tickers API", () => {
       expect(body.sectors[0]).toEqual({
         etf: "XLK",
         sectorName: "Technology",
+        isFavorite: false,
         inverseEtfs: [
           {
             symbol: "TECS",
             name: "Direxion Daily Technology Bear 3X Shares",
             relationType: "inverso",
             multiplier: -3.0,
+            isFavorite: false,
           },
         ],
       });
@@ -620,5 +637,224 @@ describe("Tickers API", () => {
 
       expect(res.status).toBe(422);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Favoritos por usuario (isFavorite + toggle)
+// ---------------------------------------------------------------------------
+
+const AUTH = { headers: { Authorization: "Bearer t" } };
+const JSON_AUTH = {
+  headers: { Authorization: "Bearer t", "content-type": "application/json" },
+};
+
+interface RoutedCfg {
+  favorites?: Array<{ ticker: { symbol: string } }>;
+  tickerLookup?: { id: number } | null;
+  list?: unknown[];
+  listCount?: number;
+  detail?: unknown;
+  overview?: unknown[];
+}
+
+/** Mock que rutea por tabla (auth + user_ticker_favorites + ticker_relations + tickers). */
+function mockRouted(cfg: RoutedCfg) {
+  globalThis.fetch = mock(async (input: unknown, init?: RequestInit) => {
+    const url = String(input);
+    const method = (init?.method ?? "GET").toUpperCase();
+    const jsonRes = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "content-type": "application/json", ...headers },
+      });
+
+    if (url.includes("/auth/v1/user")) {
+      return jsonRes({ id: "uid-user", email: "user@example.com", app_metadata: { role: "user" } });
+    }
+    if (url.includes("user_ticker_favorites")) {
+      if (method === "GET") return jsonRes(cfg.favorites ?? []);
+      return jsonRes([]); // upsert / delete
+    }
+    if (url.includes("/rest/v1/ticker_relations")) {
+      return jsonRes(cfg.overview ?? []);
+    }
+    if (url.includes("/rest/v1/tickers")) {
+      if (url.includes("select=id") && url.includes("symbol=eq")) {
+        return jsonRes(cfg.tickerLookup ?? null);
+      }
+      if (url.includes("symbol=eq")) {
+        return jsonRes(cfg.detail ?? null);
+      }
+      const total = cfg.listCount ?? cfg.list?.length ?? 0;
+      return jsonRes(cfg.list ?? [], 200, { "content-range": `0-0/${total}` });
+    }
+    return jsonRes([]);
+  }) as unknown as typeof fetch;
+}
+
+describe("tickers favoritos", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it("PUT /tickers/{symbol}/favorite → 200 { favorite: true }", async () => {
+    mockRouted({ tickerLookup: { id: 1 } });
+    const res = await createApp().request(
+      "/tickers/TSLA/favorite",
+      { ...JSON_AUTH, method: "PUT" },
+      ENV,
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { favorite: boolean }).toEqual({ favorite: true });
+  });
+
+  it("PUT /tickers/{symbol}/favorite con símbolo inexistente → 404", async () => {
+    mockRouted({ tickerLookup: null });
+    const res = await createApp().request(
+      "/tickers/NOPE/favorite",
+      { ...JSON_AUTH, method: "PUT" },
+      ENV,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("DELETE /tickers/{symbol}/favorite → 200 { favorite: false }", async () => {
+    mockRouted({ tickerLookup: { id: 1 } });
+    const res = await createApp().request(
+      "/tickers/TSLA/favorite",
+      { ...AUTH, method: "DELETE" },
+      ENV,
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { favorite: boolean }).toEqual({ favorite: false });
+  });
+
+  it("DELETE /tickers/{symbol}/favorite con símbolo inexistente → 200 (idempotente)", async () => {
+    mockRouted({ tickerLookup: null });
+    const res = await createApp().request(
+      "/tickers/NOPE/favorite",
+      { ...AUTH, method: "DELETE" },
+      ENV,
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { favorite: boolean }).toEqual({ favorite: false });
+  });
+
+  it("GET /tickers?favorite=true → filtra el listado a los favoritos del usuario", async () => {
+    mockRouted({
+      favorites: [{ ticker: { symbol: "TSLA" } }],
+      list: [{ ...TICKER_RAW_ROW, id: 1, symbol: "TSLA" }],
+      listCount: 1,
+    });
+    const res = await createApp().request("/tickers?favorite=true", AUTH, ENV);
+    expect(res.status).toBe(200);
+    // El listado se filtra en la DB por los símbolos favoritos (symbol=in.(...)).
+    const calls = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map(
+      (c) => decodeURIComponent(String(c[0])),
+    );
+    const listCall = calls.find((u) => u.includes("/rest/v1/tickers?") && u.includes("symbol=in."));
+    expect(listCall).toBeDefined();
+    expect(listCall).toContain("TSLA");
+    const body = (await res.json()) as { tickers: Array<{ isFavorite: boolean }> };
+    expect(body.tickers.every((t) => t.isFavorite)).toBe(true);
+  });
+
+  it("GET /tickers?favorite=true sin favoritos → lista vacía sin pegarle al catálogo", async () => {
+    mockRouted({ favorites: [], list: [{ ...TICKER_RAW_ROW }], listCount: 5 });
+    const res = await createApp().request("/tickers?favorite=true", AUTH, ENV);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { tickers: unknown[]; pagination: { total: number } };
+    expect(body.tickers).toHaveLength(0);
+    expect(body.pagination.total).toBe(0);
+  });
+
+  it("GET /tickers → cada activo trae isFavorite según los favoritos del usuario", async () => {
+    mockRouted({
+      favorites: [{ ticker: { symbol: "TSLA" } }],
+      list: [
+        { ...TICKER_RAW_ROW, id: 1, symbol: "TSLA" },
+        { ...TICKER_RAW_ROW, id: 2, symbol: "AAPL" },
+      ],
+      listCount: 2,
+    });
+    const res = await createApp().request("/tickers", AUTH, ENV);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      tickers: Array<{ symbol: string; isFavorite: boolean }>;
+    };
+    const bySymbol = Object.fromEntries(body.tickers.map((t) => [t.symbol, t.isFavorite]));
+    expect(bySymbol.TSLA).toBe(true);
+    expect(bySymbol.AAPL).toBe(false);
+  });
+
+  it("GET /tickers/{symbol} → isFavorite en el activo y en sus relaciones", async () => {
+    mockRouted({
+      favorites: [{ ticker: { symbol: "TSLA" } }, { ticker: { symbol: "TSLL" } }],
+      detail: {
+        ...TICKER_RAW_ROW,
+        id: 1,
+        symbol: "TSLA",
+        ticker_relations: [
+          {
+            relation_type: "x2",
+            multiplier: "2.00",
+            related_ticker: { symbol: "TSLL", name: "Direxion Daily TSLA Bull 2X Shares" },
+          },
+          {
+            relation_type: "inverso",
+            multiplier: "-1.00",
+            related_ticker: { symbol: "TSLS", name: "Direxion Daily TSLA Bear 1X Shares" },
+          },
+        ],
+        investep_plan_tickers: [],
+      },
+    });
+    const res = await createApp().request("/tickers/TSLA", AUTH, ENV);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      symbol: string;
+      isFavorite: boolean;
+      relations: Array<{ symbol: string; isFavorite: boolean }>;
+    };
+    expect(body.isFavorite).toBe(true);
+    const rel = Object.fromEntries(body.relations.map((r) => [r.symbol, r.isFavorite]));
+    expect(rel.TSLL).toBe(true);
+    expect(rel.TSLS).toBe(false);
+  });
+
+  it("GET /tickers/relations-overview → isFavorite en activos y ETFs", async () => {
+    mockRouted({
+      favorites: [{ ticker: { symbol: "TSLA" } }, { ticker: { symbol: "TSLL" } }],
+      overview: [
+        {
+          relation_type: "x2",
+          multiplier: "2.00",
+          parent: { symbol: "TSLA", name: "Tesla, Inc.", asset_class: "stock", sector: "Cyclical" },
+          related: { symbol: "TSLL", name: "Direxion Daily TSLA Bull 2X Shares" },
+        },
+        {
+          relation_type: "inverso",
+          multiplier: "-1.00",
+          parent: { symbol: "TSLA", name: "Tesla, Inc.", asset_class: "stock", sector: "Cyclical" },
+          related: { symbol: "TSLS", name: "Direxion Daily TSLA Bear 1X Shares" },
+        },
+      ],
+    });
+    const res = await createApp().request("/tickers/relations-overview", AUTH, ENV);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      assets: Array<{
+        symbol: string;
+        isFavorite: boolean;
+        longEtfs: Array<{ symbol: string; isFavorite: boolean }>;
+        inverseEtfs: Array<{ symbol: string; isFavorite: boolean }>;
+      }>;
+    };
+    const tsla = body.assets.find((a) => a.symbol === "TSLA");
+    expect(tsla?.isFavorite).toBe(true);
+    expect(tsla?.longEtfs.find((e) => e.symbol === "TSLL")?.isFavorite).toBe(true);
+    expect(tsla?.inverseEtfs.find((e) => e.symbol === "TSLS")?.isFavorite).toBe(false);
   });
 });

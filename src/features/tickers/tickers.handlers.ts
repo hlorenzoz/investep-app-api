@@ -3,6 +3,7 @@ import { AppError } from "../../lib/errors";
 import { createSupabaseAdminClient } from "../../lib/supabase";
 import type { AuthedBindings } from "../../types/app";
 import type {
+  AddFavoriteRoute,
   AssociatePlanRoute,
   AssociateRelationRoute,
   CreateTickerRoute,
@@ -12,6 +13,7 @@ import type {
   GetTickerRoute,
   ListTickersRoute,
   RelationsOverviewRoute,
+  RemoveFavoriteRoute,
   UpdateTickerRoute,
 } from "./tickers.routes";
 import {
@@ -24,6 +26,8 @@ import {
   getRelationsOverview,
   getTickerDetail,
   listTickers,
+  setFavorite,
+  unsetFavorite,
   updateTicker,
 } from "./tickers.service";
 
@@ -31,7 +35,7 @@ import {
 export const listTickersHandler: RouteHandler<ListTickersRoute, AuthedBindings> = async (c) => {
   const query = c.req.valid("query");
   const admin = createSupabaseAdminClient(c.env);
-  const { tickers, total, page, limit } = await listTickers(admin, query);
+  const { tickers, total, page, limit } = await listTickers(admin, c.get("user").id, query);
   return c.json(
     {
       tickers,
@@ -45,7 +49,7 @@ export const listTickersHandler: RouteHandler<ListTickersRoute, AuthedBindings> 
 export const getTickerHandler: RouteHandler<GetTickerRoute, AuthedBindings> = async (c) => {
   const { symbol } = c.req.valid("param");
   const admin = createSupabaseAdminClient(c.env);
-  const ticker = await getTickerDetail(admin, symbol);
+  const ticker = await getTickerDetail(admin, c.get("user").id, symbol);
 
   if (!ticker) {
     throw new AppError("NOT_FOUND", "El activo no existe.", 404);
@@ -54,13 +58,31 @@ export const getTickerHandler: RouteHandler<GetTickerRoute, AuthedBindings> = as
   return c.json(ticker, 200);
 };
 
+/** PUT /tickers/{symbol}/favorite — Marcar como favorito */
+export const addFavoriteHandler: RouteHandler<AddFavoriteRoute, AuthedBindings> = async (c) => {
+  const { symbol } = c.req.valid("param");
+  const admin = createSupabaseAdminClient(c.env);
+  await setFavorite(admin, c.get("user").id, symbol);
+  return c.json({ favorite: true as const }, 200);
+};
+
+/** DELETE /tickers/{symbol}/favorite — Quitar de favoritos */
+export const removeFavoriteHandler: RouteHandler<RemoveFavoriteRoute, AuthedBindings> = async (
+  c,
+) => {
+  const { symbol } = c.req.valid("param");
+  const admin = createSupabaseAdminClient(c.env);
+  await unsetFavorite(admin, c.get("user").id, symbol);
+  return c.json({ favorite: false as const }, 200);
+};
+
 /** GET /tickers/relations-overview — Vista de referencia de relaciones entre activos */
 export const relationsOverviewHandler: RouteHandler<
   RelationsOverviewRoute,
   AuthedBindings
 > = async (c) => {
   const admin = createSupabaseAdminClient(c.env);
-  const overview = await getRelationsOverview(admin);
+  const overview = await getRelationsOverview(admin, c.get("user").id);
   return c.json(overview, 200);
 };
 
