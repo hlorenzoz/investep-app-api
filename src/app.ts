@@ -9,6 +9,7 @@ import { authRouter } from "./features/auth";
 import { adminBrokersRouter, brokersRouter } from "./features/brokers";
 import { capitalRouter } from "./features/capital";
 import { healthRouter } from "./features/health/health.router";
+import { operationsRouter } from "./features/operations";
 import { adminPlansRouter, plansRouter } from "./features/plans";
 import { portfolioRouter } from "./features/portfolio";
 import { adminTickersRouter, tickersRouter } from "./features/tickers";
@@ -42,6 +43,7 @@ export function createApp() {
   app.route("/auth", authRouter);
   app.route("/plans", plansRouter);
   app.route("/capital", capitalRouter);
+  app.route("/operations", operationsRouter);
   app.route("/portfolio", portfolioRouter);
   app.route("/brokers", brokersRouter);
   app.route("/tickers", tickersRouter);

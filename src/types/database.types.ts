@@ -671,6 +671,80 @@ export type Database = {
         }
         Relationships: []
       }
+      trade_operations: {
+        Row: {
+          account_type: string
+          allocation_id: string
+          buy_price: number
+          contract_type: string | null
+          created_at: string
+          expiration_date: string | null
+          id: string
+          limit_price: number | null
+          notes: string | null
+          opened_at: string
+          quantity: number
+          sell_price: number | null
+          sold_at: string | null
+          strategy: string | null
+          strike: number | null
+          ticker: string
+          updated_at: string
+          url: string | null
+          user_id: string
+        }
+        Insert: {
+          account_type: string
+          allocation_id: string
+          buy_price: number
+          contract_type?: string | null
+          created_at?: string
+          expiration_date?: string | null
+          id?: string
+          limit_price?: number | null
+          notes?: string | null
+          opened_at: string
+          quantity: number
+          sell_price?: number | null
+          sold_at?: string | null
+          strategy?: string | null
+          strike?: number | null
+          ticker: string
+          updated_at?: string
+          url?: string | null
+          user_id: string
+        }
+        Update: {
+          account_type?: string
+          allocation_id?: string
+          buy_price?: number
+          contract_type?: string | null
+          created_at?: string
+          expiration_date?: string | null
+          id?: string
+          limit_price?: number | null
+          notes?: string | null
+          opened_at?: string
+          quantity?: number
+          sell_price?: number | null
+          sold_at?: string | null
+          strategy?: string | null
+          strike?: number | null
+          ticker?: string
+          updated_at?: string
+          url?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trade_operations_allocation_fk"
+            columns: ["allocation_id", "account_type"]
+            isOneToOne: false
+            referencedRelation: "broker_allocations"
+            referencedColumns: ["id", "account_type"]
+          },
+        ]
+      }
       user_capital: {
         Row: {
           created_at: string
