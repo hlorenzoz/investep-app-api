@@ -2,6 +2,7 @@ import { AppError } from "../../lib/errors";
 import type {
   AccountType,
   ContractType,
+  NewOperationRecord,
   OperationListFilter,
   OperationRecordPatch,
   OperationRow,
@@ -22,24 +23,11 @@ export interface OperationView extends OperationRow {
   gainPct: number | null;
 }
 
-export interface CreateOperationInput {
-  allocationId: string;
-  ticker: string;
-  openedAt: string;
-  quantity: number;
-  buyPrice: number;
-  limitPrice?: number;
-  strike?: number;
-  expirationDate?: string;
-  contractType?: ContractType;
-  soldAt?: string;
-  sellPrice?: number;
-  strategy?: string;
-  notes?: string;
-  url?: string;
-}
+/** Entrada de creación: el mismo registro que persiste el repo, menos el `accountType`
+ * (que deriva de la cuenta, no del body). Evita re-declarar los 14 campos. */
+export type CreateOperationInput = Omit<NewOperationRecord, "accountType">;
 
-export interface UpdateOperationInput extends OperationRecordPatch {}
+export type UpdateOperationInput = OperationRecordPatch;
 
 const MULTIPLIER: Record<AccountType, number> = { equity: 1, options: 100 };
 
@@ -130,6 +118,17 @@ function assertSalePair(soldAt: string | null, sellPrice: number | null): void {
   }
 }
 
+/** La venta no puede ser anterior a la compra. */
+function assertSaleAfterOpen(openedAt: string, soldAt: string | null): void {
+  if (soldAt !== null && new Date(soldAt).getTime() < new Date(openedAt).getTime()) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      "La fecha de venta no puede ser anterior a la fecha de compra.",
+      422,
+    );
+  }
+}
+
 /** Lista las operaciones del usuario (filtros opcionales por cuenta y estado). */
 export async function listOperations(
   repo: OperationsRepository,
@@ -169,6 +168,7 @@ export async function createOperation(
 
   validateTypedFields(allocation.accountType, input, "create");
   assertSalePair(input.soldAt ?? null, input.sellPrice ?? null);
+  assertSaleAfterOpen(input.openedAt, input.soldAt ?? null);
 
   const row = await repo.createOperation(userId, {
     ...input,
@@ -193,7 +193,9 @@ export async function updateOperation(
 
   const soldAt = patch.soldAt === undefined ? existing.soldAt : patch.soldAt;
   const sellPrice = patch.sellPrice === undefined ? existing.sellPrice : patch.sellPrice;
+  const openedAt = patch.openedAt === undefined ? existing.openedAt : patch.openedAt;
   assertSalePair(soldAt, sellPrice);
+  assertSaleAfterOpen(openedAt, soldAt);
 
   const row = await repo.updateOperation(userId, id, patch);
   return toView(row);

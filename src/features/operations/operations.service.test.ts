@@ -409,6 +409,53 @@ describe("updateOperation", () => {
       status: 422,
     });
   });
+
+  it("422 si al mover openedAt la venta queda antes de la compra", async () => {
+    const repo = makeRepo({
+      operations: [
+        equityRow({
+          id: "e1",
+          openedAt: "2026-06-01T00:00:00.000Z",
+          soldAt: "2026-06-05T00:00:00.000Z",
+          sellPrice: 30,
+        }),
+      ],
+    });
+    await expect(
+      updateOperation(repo, U, "e1", { openedAt: "2026-06-10T00:00:00.000Z" }),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR", status: 422 });
+  });
+});
+
+describe("validación temporal (soldAt >= openedAt)", () => {
+  it("422 al crear con soldAt anterior a openedAt", async () => {
+    const repo = makeRepo();
+    await expect(
+      createOperation(repo, U, {
+        allocationId: "alloc-eq",
+        ticker: "AAPL",
+        openedAt: "2026-06-15T00:00:00.000Z",
+        quantity: 10,
+        buyPrice: 25.5,
+        soldAt: "2026-06-01T00:00:00.000Z",
+        sellPrice: 30,
+      }),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR", status: 422 });
+  });
+
+  it("permite soldAt igual a openedAt (borde ==)", async () => {
+    const repo = makeRepo();
+    const view = await createOperation(repo, U, {
+      allocationId: "alloc-eq",
+      ticker: "AAPL",
+      openedAt: "2026-06-15T00:00:00.000Z",
+      quantity: 10,
+      buyPrice: 25.5,
+      soldAt: "2026-06-15T00:00:00.000Z",
+      sellPrice: 30,
+    });
+    expect(view.status).toBe("closed");
+  });
 });
 
 describe("deleteOperation", () => {

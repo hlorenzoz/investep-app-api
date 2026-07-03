@@ -26,3 +26,18 @@ export const ErrorSchema = z
   .openapi("Error");
 
 export type ErrorResponse = z.infer<typeof ErrorSchema>;
+
+/**
+ * Símbolo de ticker normalizado y validado. Fuente ÚNICA compartida entre features
+ * (tickers, operations) para que un símbolo aceptado por un endpoint no lo rechace otro.
+ * - Normaliza: recorta espacios y pasa a mayúsculas.
+ * - Acepta índices (^GSPC) y clases de acción (BRK.B); acota a 1-12 caracteres.
+ * El CHECK `trade_operations_ticker_check` de la DB replica este patrón (defensa en profundidad).
+ */
+export const tickerSymbolSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .min(1)
+  .max(12)
+  .regex(/^[A-Z0-9.^-]+$/, "Símbolo inválido (solo A-Z, 0-9, '.', '^' o '-'; máx 12).");

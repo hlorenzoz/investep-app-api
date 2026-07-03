@@ -1,18 +1,27 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { jsonErrorResponse } from "../../lib/openapi";
+import { tickerSymbolSchema } from "../../schemas/common";
 
 const AccountTypeEnum = z.enum(["equity", "options"]);
 const ContractTypeEnum = z.enum(["call", "put"]);
 const OperationStatusEnum = z.enum(["open", "closed"]);
 
-const TickerSchema = z
-  .string()
-  .regex(/^[A-Z0-9.^-]{1,12}$/)
-  .openapi({
-    description:
-      "Símbolo del ticker en mayúsculas (admite índices como ^GSPC y clases como BRK.B).",
-    example: "^GSPC",
-  });
+// numeric(14,4): 10 dígitos enteros + 4 decimales. Acotar en Zod para que un valor fuera
+// de rango salga 422 (y no reviente en la DB con overflow → 500). MIN_POSITIVE es el menor
+// valor > 0 representable a escala 4: por debajo redondearía a 0 y violaría los CHECK > 0.
+const MAX_NUMERIC = 9_999_999_999.9999;
+const MIN_POSITIVE = 0.0001;
+const positiveAmount = () => z.number().min(MIN_POSITIVE).max(MAX_NUMERIC);
+const nonNegativeAmount = () => z.number().min(0).max(MAX_NUMERIC);
+
+// `timestamptz` acepta cualquier offset horario; permitir offset además de 'Z' (Zod usa
+// offset:false por defecto) para no rechazar timestamps ISO-8601 legítimos con -04:00, etc.
+const timestamp = () => z.string().datetime({ offset: true });
+
+const TickerSchema = tickerSymbolSchema.openapi({
+  description: "Símbolo del ticker (se normaliza a mayúsculas; admite índices como ^GSPC).",
+  example: "^GSPC",
+});
 
 /**
  * Operación del journal de trading. Los campos `strike`, `expirationDate` y
@@ -33,7 +42,7 @@ export const OperationSchema = z
       example: "options",
     }),
     ticker: TickerSchema,
-    openedAt: z.string().datetime().openapi({
+    openedAt: timestamp().openapi({
       description: "Fecha y hora de la compra (ISO 8601).",
       example: "2026-06-01T14:30:00.000Z",
     }),
@@ -61,7 +70,7 @@ export const OperationSchema = z
       description: "SOLO opciones: call o put. Null en activos.",
       example: "call",
     }),
-    soldAt: z.string().datetime().nullable().openapi({
+    soldAt: timestamp().nullable().openapi({
       description: "Fecha de venta. Null mientras la operación siga abierta.",
       example: "2026-06-15T18:00:00.000Z",
     }),
@@ -78,8 +87,8 @@ export const OperationSchema = z
       description: "URL de referencia (p. ej. cadena de opciones de Yahoo Finance).",
       example: "https://finance.yahoo.com/quote/%5EGSPC/options/",
     }),
-    createdAt: z.string().datetime().openapi({ example: "2026-06-01T14:30:00.000Z" }),
-    updatedAt: z.string().datetime().openapi({ example: "2026-06-01T14:30:00.000Z" }),
+    createdAt: timestamp().openapi({ example: "2026-06-01T14:30:00.000Z" }),
+    updatedAt: timestamp().openapi({ example: "2026-06-01T14:30:00.000Z" }),
     status: OperationStatusEnum.openapi({
       description: "DERIVADO: open si no hay venta registrada; closed si la hay.",
       example: "open",
@@ -116,24 +125,24 @@ export const CreateOperationRequestSchema = z
         example: "8f3b1d2e-0a4c-4e6f-9b2a-1c2d3e4f5a6b",
       }),
     ticker: TickerSchema,
-    openedAt: z.string().datetime().openapi({
+    openedAt: timestamp().openapi({
       description: "Fecha y hora de la compra (ISO 8601).",
       example: "2026-06-01T14:30:00.000Z",
     }),
-    quantity: z.number().positive().openapi({
+    quantity: positiveAmount().openapi({
       description:
         "Cantidad. Acciones: fraccional permitida. Opciones: contratos, debe ser entera.",
       example: 2,
     }),
-    buyPrice: z.number().positive().openapi({
+    buyPrice: positiveAmount().openapi({
       description: "Precio de compra unitario (prima por acción en opciones).",
       example: 3.5,
     }),
-    limitPrice: z.number().positive().optional().openapi({
+    limitPrice: positiveAmount().optional().openapi({
       description: "Precio límite / objetivo de venta.",
       example: 5.5,
     }),
-    strike: z.number().positive().optional().openapi({
+    strike: positiveAmount().optional().openapi({
       description:
         "Precio de ejercicio. REQUERIDO si la cuenta es de opciones; prohibido en equity.",
       example: 5300,
@@ -147,12 +156,12 @@ export const CreateOperationRequestSchema = z
       description: "call o put. REQUERIDO si la cuenta es de opciones; prohibido en equity.",
       example: "call",
     }),
-    soldAt: z.string().datetime().optional().openapi({
+    soldAt: timestamp().optional().openapi({
       description:
-        "Fecha de venta (si se registra una operación ya cerrada). Va junto a sellPrice.",
+        "Fecha de venta (si se registra una operación ya cerrada). Va junto a sellPrice y debe ser >= openedAt.",
       example: "2026-06-15T18:00:00.000Z",
     }),
-    sellPrice: z.number().nonnegative().optional().openapi({
+    sellPrice: nonNegativeAmount().optional().openapi({
       description:
         "Precio de venta unitario (0 admitido: opción que expira sin valor). Va junto a soldAt.",
       example: 5,
@@ -168,15 +177,15 @@ export const CreateOperationRequestSchema = z
 export const UpdateOperationRequestSchema = z
   .object({
     ticker: TickerSchema.optional(),
-    openedAt: z.string().datetime().optional(),
-    quantity: z.number().positive().optional().openapi({
+    openedAt: timestamp().optional(),
+    quantity: positiveAmount().optional().openapi({
       description: "En opciones debe seguir siendo entera.",
     }),
-    buyPrice: z.number().positive().optional(),
-    limitPrice: z.number().positive().nullable().optional().openapi({
+    buyPrice: positiveAmount().optional(),
+    limitPrice: positiveAmount().nullable().optional().openapi({
       description: "null explícito limpia el precio límite.",
     }),
-    strike: z.number().positive().optional().openapi({
+    strike: positiveAmount().optional().openapi({
       description: "SOLO operaciones de opciones (no admite null: es obligatorio en opciones).",
     }),
     expirationDate: z.string().date().optional().openapi({
@@ -185,16 +194,19 @@ export const UpdateOperationRequestSchema = z
     contractType: ContractTypeEnum.optional().openapi({
       description: "SOLO operaciones de opciones.",
     }),
-    soldAt: z.string().datetime().nullable().optional().openapi({
+    soldAt: timestamp().nullable().optional().openapi({
       description:
-        "Registrar venta (junto a sellPrice) o null para deshacerla (junto a sellPrice: null).",
+        "Registrar venta (junto a sellPrice, >= openedAt) o null para deshacerla (junto a sellPrice: null).",
     }),
-    sellPrice: z.number().nonnegative().nullable().optional().openapi({
+    sellPrice: nonNegativeAmount().nullable().optional().openapi({
       description: "Va junto a soldAt (ambos con valor o ambos null).",
     }),
     strategy: z.string().max(120).nullable().optional(),
     notes: z.string().max(2000).nullable().optional(),
     url: z.string().url().max(500).nullable().optional(),
+  })
+  .refine((patch) => Object.keys(patch).length > 0, {
+    message: "El cuerpo del PATCH no puede estar vacío: indicá al menos un campo a modificar.",
   })
   .openapi("UpdateOperationRequest");
 

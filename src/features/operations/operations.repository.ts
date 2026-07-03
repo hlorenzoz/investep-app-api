@@ -1,4 +1,5 @@
-import { throwPostgrestError } from "../../lib/postgres-error";
+import { AppError } from "../../lib/errors";
+import { throwForeignKeyAs422, throwPostgrestError } from "../../lib/postgres-error";
 import type { AppSupabaseClient } from "../../lib/supabase";
 import type { Database } from "../../types/database.types";
 
@@ -242,7 +243,16 @@ export function createSupabaseOperationsRepository(admin: AppSupabaseClient): Op
         })
         .select(OPERATION_SELECT)
         .single<OperationQueryRow>();
-      if (error || !data) throwPostgrestError(error, "No se pudo crear la operación.", status);
+      if (error || !data) {
+        // FK compuesta rota = la cuenta destino desapareció o cambió de tipo en carrera:
+        // input inválido → 422 (no 500). El resto cae al mapeo estándar.
+        throwForeignKeyAs422(
+          error,
+          "La cuenta de bróker indicada no existe o no es del usuario.",
+          "No se pudo crear la operación.",
+          status,
+        );
+      }
       return mapOperation(data);
     },
 
@@ -253,8 +263,10 @@ export function createSupabaseOperationsRepository(admin: AppSupabaseClient): Op
         .eq("user_id", userId)
         .eq("id", id)
         .select(OPERATION_SELECT)
-        .single<OperationQueryRow>();
-      if (error || !data) throwPostgrestError(error, "No se pudo actualizar la operación.", status);
+        .maybeSingle<OperationQueryRow>();
+      if (error) throwPostgrestError(error, "No se pudo actualizar la operación.", status);
+      // 0 filas: la operación se borró en carrera entre el pre-chequeo y el UPDATE → 404, no 500.
+      if (!data) throw new AppError("NOT_FOUND", "Operación no encontrada.", 404);
       return mapOperation(data);
     },
 

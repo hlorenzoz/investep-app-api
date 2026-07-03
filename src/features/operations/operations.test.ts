@@ -80,6 +80,7 @@ interface Cfg {
   errorOn?: string;
   errorStatus?: number;
   errorMessage?: string;
+  errorCode?: string;
 }
 
 /** Mock de fetch que enruta auth + PostgREST por tabla/método/filtro. */
@@ -93,7 +94,7 @@ function mockSupabase(cfg: Cfg = {}) {
     }
     if (cfg.errorOn && url.includes(cfg.errorOn)) {
       return json(
-        { message: cfg.errorMessage ?? "boom", code: "", details: "", hint: "" },
+        { message: cfg.errorMessage ?? "boom", code: cfg.errorCode ?? "", details: "", hint: "" },
         cfg.errorStatus ?? 500,
       );
     }
@@ -102,7 +103,7 @@ function mockSupabase(cfg: Cfg = {}) {
     }
     if (url.includes("/trade_operations")) {
       if (method === "POST") return json(cfg.created);
-      if (method === "PATCH") return json(cfg.updated);
+      if (method === "PATCH") return json(cfg.updated ?? null);
       if (method === "DELETE") return json(cfg.deleted ?? []);
       if (/[?&]id=eq\./.test(url)) return json(cfg.operation ? [cfg.operation] : []);
       return json(cfg.operations ?? []);
@@ -355,5 +356,177 @@ describe("operations endpoints", () => {
     expect(res.status).toBe(503);
     const body = (await res.json()) as { error: { code: string } };
     expect(body.error.code).toBe("SERVICE_UNAVAILABLE");
+  });
+
+  // --- #1: cotas numeric(14,4) (no 500 de la DB) ---
+  it("POST con buyPrice fuera del rango numeric(14,4) → 422 (Zod, no 500)", async () => {
+    mockSupabase({});
+    const res = await createApp().request(
+      "/operations",
+      {
+        ...JSON_AUTH,
+        method: "POST",
+        body: JSON.stringify({
+          allocationId: ALLOC_ID,
+          ticker: "AAPL",
+          openedAt: "2026-06-01T14:30:00.000Z",
+          quantity: 10,
+          buyPrice: 12345678901, // 11 dígitos enteros → overflow numeric(14,4)
+        }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it("POST con buyPrice sub-precisión (rondaría a 0) → 422 (Zod, no 500)", async () => {
+    mockSupabase({});
+    const res = await createApp().request(
+      "/operations",
+      {
+        ...JSON_AUTH,
+        method: "POST",
+        body: JSON.stringify({
+          allocationId: ALLOC_ID,
+          ticker: "AAPL",
+          openedAt: "2026-06-01T14:30:00.000Z",
+          quantity: 10,
+          buyPrice: 0.00001, // < 0.0001 → a escala 4 sería 0 → violaría buy_price > 0
+        }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(422);
+  });
+
+  // --- #2: datetime con offset horario aceptado ---
+  it("POST con openedAt en offset horario (no Z) → 201", async () => {
+    mockSupabase({
+      allocation: { id: ALLOC_ID, account_type: "options" },
+      created: opDb({ id: OP_ID }),
+    });
+    const res = await createApp().request(
+      "/operations",
+      {
+        ...JSON_AUTH,
+        method: "POST",
+        body: JSON.stringify({
+          allocationId: ALLOC_ID,
+          ticker: "^GSPC",
+          openedAt: "2026-06-01T09:30:00-04:00",
+          quantity: 2,
+          buyPrice: 3.5,
+          strike: 5300,
+          expirationDate: "2026-07-17",
+          contractType: "call",
+        }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(201);
+  });
+
+  // --- #8: símbolo en minúsculas se normaliza a mayúsculas (schema compartido) ---
+  it("POST con ticker en minúsculas → 201 (normalizado)", async () => {
+    mockSupabase({
+      allocation: { id: ALLOC_ID, account_type: "equity" },
+      created: opDb({
+        id: OP_ID,
+        account_type: "equity",
+        ticker: "AAPL",
+        strike: null,
+        expiration_date: null,
+        contract_type: null,
+      }),
+    });
+    const res = await createApp().request(
+      "/operations",
+      {
+        ...JSON_AUTH,
+        method: "POST",
+        body: JSON.stringify({
+          allocationId: ALLOC_ID,
+          ticker: "aapl",
+          openedAt: "2026-06-01T14:30:00.000Z",
+          quantity: 10,
+          buyPrice: 25.5,
+        }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(201);
+  });
+
+  // --- #3: PATCH vacío → 422 (no 500) ---
+  it("PATCH con body vacío ({}) → 422 (no 500)", async () => {
+    mockSupabase({});
+    const res = await createApp().request(
+      `/operations/${OP_ID}`,
+      { ...JSON_AUTH, method: "PATCH", body: JSON.stringify({}) },
+      ENV,
+    );
+    expect(res.status).toBe(422);
+  });
+
+  // --- #4: violación de FK en el INSERT → 422 (no 500) ---
+  it("POST con FK rota (cuenta borrada en carrera) → 422 (no 500)", async () => {
+    mockSupabase({
+      allocation: { id: ALLOC_ID, account_type: "equity" },
+      errorOn: "/trade_operations",
+      errorStatus: 409,
+      errorCode: "23503",
+      errorMessage: "insert or update on table violates foreign key constraint",
+    });
+    const res = await createApp().request(
+      "/operations",
+      {
+        ...JSON_AUTH,
+        method: "POST",
+        body: JSON.stringify({
+          allocationId: ALLOC_ID,
+          ticker: "AAPL",
+          openedAt: "2026-06-01T14:30:00.000Z",
+          quantity: 10,
+          buyPrice: 25.5,
+        }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(422);
+  });
+
+  // --- #5: PATCH que matchea 0 filas (borrado en carrera) → 404 (no 500) ---
+  it("PATCH que matchea 0 filas → 404 (no 500)", async () => {
+    // getOperation encuentra la fila; el UPDATE no matchea ninguna (borrada en carrera).
+    mockSupabase({ operation: opDb({ id: OP_ID }), updated: undefined });
+    const res = await createApp().request(
+      `/operations/${OP_ID}`,
+      { ...JSON_AUTH, method: "PATCH", body: JSON.stringify({ buyPrice: 4 }) },
+      ENV,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  // --- #7: fecha de venta anterior a la de compra → 422 ---
+  it("POST con soldAt anterior a openedAt → 422", async () => {
+    mockSupabase({ allocation: { id: ALLOC_ID, account_type: "equity" } });
+    const res = await createApp().request(
+      "/operations",
+      {
+        ...JSON_AUTH,
+        method: "POST",
+        body: JSON.stringify({
+          allocationId: ALLOC_ID,
+          ticker: "AAPL",
+          openedAt: "2026-06-15T14:30:00.000Z",
+          quantity: 10,
+          buyPrice: 25.5,
+          soldAt: "2026-06-01T14:30:00.000Z",
+          sellPrice: 30,
+        }),
+      },
+      ENV,
+    );
+    expect(res.status).toBe(422);
   });
 });
