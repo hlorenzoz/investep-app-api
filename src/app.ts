@@ -15,6 +15,7 @@ import { portfolioRouter } from "./features/portfolio";
 import { adminTickersRouter, tickersRouter } from "./features/tickers";
 import { adminUsersRouter } from "./features/users";
 import { openApiConfig, validationHook } from "./lib/openapi";
+import { createCorsMiddleware } from "./middleware/cors";
 import { docsGuard } from "./middleware/docs-guard";
 import { errorHandler } from "./middleware/error-handler";
 import type { AppBindings } from "./types/app";
@@ -34,6 +35,8 @@ export function createApp() {
   // Middleware base. OJO: no loguear cuerpos, headers ni datos sensibles (AGENTS.md §5).
   app.use("*", logger());
   app.use("*", secureHeaders());
+  // CORS temprano: el preflight OPTIONS se resuelve antes de las rutas y de `requireAuth`.
+  app.use("*", createCorsMiddleware());
 
   // Manejador global de errores → respuesta consistente, sin filtrar internals.
   app.onError(errorHandler);

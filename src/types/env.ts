@@ -15,6 +15,10 @@ export interface Env {
   SUPABASE_SERVICE_ROLE_KEY: string;
   DOCS_TOKEN?: string;
 
+  // Orígenes permitidos por CORS (coma-separado, p. ej. "https://app.investep.com").
+  // En dev/staging además se permite cualquier localhost. Vacío en prod = sin CORS.
+  CORS_ORIGINS?: string;
+
   // Resend (envío de correo transaccional). API key del panel + remitente del dominio
   // verificado (formato "Nombre <correo@dominio>"). Opcionales como DOCS_TOKEN: no todos
   // los entornos los tienen cargados todavía y el cliente falla limpio si faltan.
