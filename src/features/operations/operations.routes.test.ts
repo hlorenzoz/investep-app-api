@@ -28,6 +28,11 @@ describe("CreateOperationRequestSchema · openedAt/soldAt aceptan fecha sola", (
     expect(r.openedAt).toBe(dt);
   });
 
+  it("openedAt naive SIN zona (Flutter toIso8601String local) → se asume UTC (append Z)", () => {
+    const r = CreateOperationRequestSchema.parse({ ...base, openedAt: "2026-07-04T00:00:00.000" });
+    expect(r.openedAt).toBe("2026-07-04T00:00:00.000Z");
+  });
+
   it("openedAt basura → 422", () => {
     const r = CreateOperationRequestSchema.safeParse({ ...base, openedAt: "no-es-fecha" });
     expect(r.success).toBe(false);

@@ -18,14 +18,21 @@ const nonNegativeAmount = () => z.number().min(0).max(MAX_NUMERIC);
 // offset:false por defecto) para no rechazar timestamps ISO-8601 legítimos con -04:00, etc.
 const timestamp = () => z.string().datetime({ offset: true });
 
-// Fechas de ENTRADA (openedAt/soldAt): el date-picker del form manda fecha sola
-// (YYYY-MM-DD). Aceptamos eso además del datetime ISO completo, normalizando la fecha
-// sola a medianoche UTC para que la DB reciba siempre un timestamp determinista (no
-// dependiente de la zona horaria de la sesión). Las fechas de SALIDA siguen usando
-// `timestamp()` (la DB devuelve siempre un timestamptz completo).
+// Fechas de ENTRADA (openedAt/soldAt). El front puede mandarlas en tres formas y las
+// normalizamos a un timestamp UTC determinista (la DB no debe depender de la zona de la
+// sesión). Las fechas de SALIDA siguen usando `timestamp()` (la DB devuelve timestamptz
+// completo). Orden del union = orden de intento:
+//   1) con zona (Z u offset ±hh:mm) → se usa tal cual.
+//   2) naive sin zona (Flutter `DateTime.toIso8601String()` sobre un DateTime local, p. ej.
+//      "2026-07-04T00:00:00.000") → se asume UTC (append "Z").
+//   3) fecha sola YYYY-MM-DD (date-picker) → medianoche UTC.
 const dateOrTimestamp = () =>
   z.union([
     z.string().datetime({ offset: true }),
+    z
+      .string()
+      .datetime({ local: true })
+      .transform((d) => `${d}Z`),
     z
       .string()
       .date()
