@@ -18,6 +18,20 @@ const nonNegativeAmount = () => z.number().min(0).max(MAX_NUMERIC);
 // offset:false por defecto) para no rechazar timestamps ISO-8601 legítimos con -04:00, etc.
 const timestamp = () => z.string().datetime({ offset: true });
 
+// Fechas de ENTRADA (openedAt/soldAt): el date-picker del form manda fecha sola
+// (YYYY-MM-DD). Aceptamos eso además del datetime ISO completo, normalizando la fecha
+// sola a medianoche UTC para que la DB reciba siempre un timestamp determinista (no
+// dependiente de la zona horaria de la sesión). Las fechas de SALIDA siguen usando
+// `timestamp()` (la DB devuelve siempre un timestamptz completo).
+const dateOrTimestamp = () =>
+  z.union([
+    z.string().datetime({ offset: true }),
+    z
+      .string()
+      .date()
+      .transform((d) => `${d}T00:00:00.000Z`),
+  ]);
+
 const TickerSchema = tickerSymbolSchema.openapi({
   description: "Símbolo del ticker (se normaliza a mayúsculas; admite índices como ^GSPC).",
   example: "^GSPC",
@@ -125,8 +139,8 @@ export const CreateOperationRequestSchema = z
         example: "8f3b1d2e-0a4c-4e6f-9b2a-1c2d3e4f5a6b",
       }),
     ticker: TickerSchema,
-    openedAt: timestamp().openapi({
-      description: "Fecha y hora de la compra (ISO 8601).",
+    openedAt: dateOrTimestamp().openapi({
+      description: "Fecha de compra: acepta fecha sola (YYYY-MM-DD) o datetime ISO 8601 completo.",
       example: "2026-06-01T14:30:00.000Z",
     }),
     quantity: positiveAmount().openapi({
@@ -156,9 +170,9 @@ export const CreateOperationRequestSchema = z
       description: "call o put. REQUERIDO si la cuenta es de opciones; prohibido en equity.",
       example: "call",
     }),
-    soldAt: timestamp().optional().openapi({
+    soldAt: dateOrTimestamp().optional().openapi({
       description:
-        "Fecha de venta (si se registra una operación ya cerrada). Va junto a sellPrice y debe ser >= openedAt.",
+        "Fecha de venta (si se registra una operación ya cerrada). Acepta fecha sola o datetime ISO. Va junto a sellPrice y debe ser >= openedAt.",
       example: "2026-06-15T18:00:00.000Z",
     }),
     sellPrice: nonNegativeAmount().optional().openapi({
@@ -177,7 +191,7 @@ export const CreateOperationRequestSchema = z
 export const UpdateOperationRequestSchema = z
   .object({
     ticker: TickerSchema.optional(),
-    openedAt: timestamp().optional(),
+    openedAt: dateOrTimestamp().optional(),
     quantity: positiveAmount().optional().openapi({
       description: "En opciones debe seguir siendo entera.",
     }),
@@ -194,9 +208,9 @@ export const UpdateOperationRequestSchema = z
     contractType: ContractTypeEnum.optional().openapi({
       description: "SOLO operaciones de opciones.",
     }),
-    soldAt: timestamp().nullable().optional().openapi({
+    soldAt: dateOrTimestamp().nullable().optional().openapi({
       description:
-        "Registrar venta (junto a sellPrice, >= openedAt) o null para deshacerla (junto a sellPrice: null).",
+        "Registrar venta (fecha sola o datetime ISO, junto a sellPrice, >= openedAt) o null para deshacerla (junto a sellPrice: null).",
     }),
     sellPrice: nonNegativeAmount().nullable().optional().openapi({
       description: "Va junto a soldAt (ambos con valor o ambos null).",

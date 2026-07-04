@@ -118,9 +118,21 @@ function assertSalePair(soldAt: string | null, sellPrice: number | null): void {
   }
 }
 
-/** La venta no puede ser anterior a la compra. */
+/** Día calendario UTC de un timestamp ISO, como epoch ms de su medianoche. */
+function utcDayStart(iso: string): number {
+  const d = new Date(iso);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+/**
+ * La venta no puede ser de un día ANTERIOR a la compra. La comparación es por día
+ * calendario (no por instante): el journal captura fechas (date-pickers, sin hora), y
+ * openedAt/soldAt pueden venir con precisión mixta (uno con hora, el otro a medianoche por
+ * ser date-only). Comparar por instante rechazaría por error una venta el mismo día que una
+ * compra intradía.
+ */
 function assertSaleAfterOpen(openedAt: string, soldAt: string | null): void {
-  if (soldAt !== null && new Date(soldAt).getTime() < new Date(openedAt).getTime()) {
+  if (soldAt !== null && utcDayStart(soldAt) < utcDayStart(openedAt)) {
     throw new AppError(
       "VALIDATION_ERROR",
       "La fecha de venta no puede ser anterior a la fecha de compra.",

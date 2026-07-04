@@ -456,6 +456,37 @@ describe("validación temporal (soldAt >= openedAt)", () => {
     });
     expect(view.status).toBe("closed");
   });
+
+  it("permite venta el MISMO día aunque la compra tenga hora (precisión mixta, journal por día)", async () => {
+    // openedAt intradía (14:30) + soldAt a medianoche del mismo día (date-picker → date-only
+    // coercido a medianoche UTC): NO debe ser rechazado. El journal compara por día calendario.
+    const repo = makeRepo();
+    const view = await createOperation(repo, U, {
+      allocationId: "alloc-eq",
+      ticker: "AAPL",
+      openedAt: "2026-07-04T14:30:00.000Z",
+      quantity: 10,
+      buyPrice: 25.5,
+      soldAt: "2026-07-04T00:00:00.000Z",
+      sellPrice: 30,
+    });
+    expect(view.status).toBe("closed");
+  });
+
+  it("422 si la venta es de un día calendario anterior (aunque sea por horas)", async () => {
+    const repo = makeRepo();
+    await expect(
+      createOperation(repo, U, {
+        allocationId: "alloc-eq",
+        ticker: "AAPL",
+        openedAt: "2026-07-04T00:00:00.000Z",
+        quantity: 10,
+        buyPrice: 25.5,
+        soldAt: "2026-07-03T23:00:00.000Z",
+        sellPrice: 30,
+      }),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR", status: 422 });
+  });
 });
 
 describe("deleteOperation", () => {
