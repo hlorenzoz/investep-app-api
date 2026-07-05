@@ -43,7 +43,8 @@ export const PlanAdminSchema = z
     targetMonthlyPct: z.number().positive().openapi({ example: 25 }),
     targetDailyPct: z.number().nullable().openapi({
       example: 1.25,
-      description: "Calculado por trigger (equity); null para options.",
+      description:
+        "Lo calcula un trigger: equity = mensual/20; options = el mismo target (para opciones el % es diario).",
     }),
     translations: z.array(PlanTranslationSchema),
   })
