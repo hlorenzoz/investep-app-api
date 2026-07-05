@@ -91,6 +91,11 @@ create-first-user:
 create-user EMAIL PASSWORD="":
     bun run scripts/provision-user.ts {{EMAIL}} {{PASSWORD}}
 
+# Crea/actualiza las 4 cuentas demo por plan (bronze/silver/gold/platinum). Idempotente.
+# Verificadas y sin cambio de contraseña forzado. ENV opcional: "" (local), staging, production.
+create-users-by-plan ENV="":
+    bun run scripts/create-users-by-plan.ts {{ENV}}
+
 # Obtiene un access_token JWT para el usuario indicado (o el bootstrap por defecto).
 token EMAIL="" PASSWORD="":
     bun run scripts/get-token.ts {{EMAIL}} {{PASSWORD}}
