@@ -12,6 +12,7 @@ import { healthRouter } from "./features/health/health.router";
 import { operationsRouter } from "./features/operations";
 import { adminPlansRouter, plansRouter } from "./features/plans";
 import { portfolioRouter } from "./features/portfolio";
+import { projectionsRouter } from "./features/projections";
 import { adminTickersRouter, tickersRouter } from "./features/tickers";
 import { adminUsersRouter } from "./features/users";
 import { openApiConfig, validationHook } from "./lib/openapi";
@@ -46,6 +47,7 @@ export function createApp() {
   app.route("/auth", authRouter);
   app.route("/plans", plansRouter);
   app.route("/capital", capitalRouter);
+  app.route("/projections", projectionsRouter);
   app.route("/operations", operationsRouter);
   app.route("/portfolio", portfolioRouter);
   app.route("/brokers", brokersRouter);
