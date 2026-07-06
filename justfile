@@ -96,6 +96,11 @@ create-user EMAIL PASSWORD="":
 create-users-by-plan ENV="":
     bun run scripts/create-users-by-plan.ts {{ENV}}
 
+# Crea/actualiza el usuario demo (demo@hlorenzoz.com / "demo") con 2 cuentas (activos 25% +
+# opciones 35%, 90/10) y ~1 mes de operaciones en cada una. Idempotente. ENV opcional.
+create-demo-user ENV="":
+    bun run scripts/create-demo-user.ts {{ENV}}
+
 # Obtiene un access_token JWT para el usuario indicado (o el bootstrap por defecto).
 token EMAIL="" PASSWORD="":
     bun run scripts/get-token.ts {{EMAIL}} {{PASSWORD}}
