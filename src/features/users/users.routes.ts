@@ -9,6 +9,7 @@ export const UserSchema = z
     fullName: z.string().nullable().openapi({ example: "Juan Pérez" }),
     createdAt: z.string().openapi({ example: "2026-06-30T16:28:24.000Z" }),
     mustResetPassword: z.boolean().openapi({ example: false }),
+    planSlug: z.string().nullable().optional().openapi({ example: "bronze" }),
   })
   .openapi("User");
 
@@ -30,6 +31,7 @@ export const CreateUserSchema = z
     fullName: z.string().min(1).nullable().optional().openapi({ example: "Juan Pérez" }),
     role: z.enum(["admin", "manager", "user"]).default("user").openapi({ example: "user" }),
     password: z.string().min(8).optional().openapi({ example: "contraseñaSegura123" }),
+    planSlug: z.string().nullable().optional().openapi({ example: "bronze" }),
   })
   .openapi("CreateUser");
 
@@ -39,6 +41,7 @@ export const UpdateUserSchema = z
     fullName: z.string().min(1).nullable().optional().openapi({ example: "Juan Pérez Modificado" }),
     role: z.enum(["admin", "manager", "user"]).optional().openapi({ example: "manager" }),
     password: z.string().min(8).optional().openapi({ example: "nuevaContraseñaSegura123" }),
+    planSlug: z.string().nullable().optional().openapi({ example: "bronze" }),
   })
   .openapi("UpdateUser");
 

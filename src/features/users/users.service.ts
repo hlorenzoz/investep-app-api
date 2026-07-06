@@ -20,6 +20,7 @@ export interface UserDTO {
   fullName: string | null;
   createdAt: string;
   mustResetPassword: boolean;
+  planSlug: string | null;
 }
 
 /**
@@ -41,7 +42,7 @@ function resolveRole(appMetadata: Record<string, unknown>): "admin" | "manager" 
 }
 
 /**
- * Lista todos los usuarios de Supabase Auth y los combina con sus perfiles de la DB.
+ * Lista todos los usuarios de Supabase Auth y los combina con sus perfiles de la DB y sus planes.
  */
 export async function listUsers(deps: UsersServiceDeps): Promise<UserDTO[]> {
   // 1. Obtener usuarios de Supabase Auth (máximo 1000 por simplicidad y límites del Worker)
@@ -79,7 +80,31 @@ export async function listUsers(deps: UsersServiceDeps): Promise<UserDTO[]> {
     (profiles ?? []).map((p) => [p.id, p.full_name]),
   );
 
-  // 3. Combinar ambos listados
+  // 3. Obtener membresías de academy_memberships
+  const { data: memberships, error: membershipsError } = await deps.admin
+    .from("academy_memberships")
+    .select("user_id, investep_plans(slug)")
+    .eq("status", "active");
+
+  if (membershipsError) {
+    throw new AppError(
+      "INTERNAL_ERROR",
+      "No se pudieron obtener las membresías de la base de datos.",
+      502,
+      undefined,
+      { cause: membershipsError },
+    );
+  }
+
+  const membershipsMap = new Map<string, string | null>();
+  for (const m of memberships ?? []) {
+    const plan = m.investep_plans as unknown as { slug: string } | null;
+    if (plan) {
+      membershipsMap.set(m.user_id, plan.slug);
+    }
+  }
+
+  // 4. Combinar todos los listados
   return authData.users.map((user) => {
     const appMetadata = (user.app_metadata ?? {}) as Record<string, unknown>;
     return {
@@ -89,12 +114,13 @@ export async function listUsers(deps: UsersServiceDeps): Promise<UserDTO[]> {
       fullName: profilesMap.get(user.id) ?? null,
       createdAt: user.created_at,
       mustResetPassword: appMetadata[MUST_RESET_PASSWORD_KEY] === true,
+      planSlug: membershipsMap.get(user.id) ?? null,
     };
   });
 }
 
 /**
- * Obtiene un único usuario combinando Auth y Profile.
+ * Obtiene un único usuario combinando Auth, Profile y Plan.
  */
 export async function getUser(deps: UsersServiceDeps, id: string): Promise<UserDTO> {
   // 1. Obtener usuario de Auth
@@ -122,6 +148,27 @@ export async function getUser(deps: UsersServiceDeps, id: string): Promise<UserD
     );
   }
 
+  // 3. Obtener membresía
+  const { data: membership, error: membershipError } = await deps.admin
+    .from("academy_memberships")
+    .select("investep_plans(slug)")
+    .eq("user_id", id)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (membershipError) {
+    throw new AppError(
+      "INTERNAL_ERROR",
+      "Error al consultar la membresía en la base de datos.",
+      502,
+      undefined,
+      { cause: membershipError },
+    );
+  }
+
+  const plan = membership?.investep_plans as unknown as { slug: string } | null;
+  const planSlug = plan?.slug ?? null;
+
   const user = authData.user;
   const appMetadata = (user.app_metadata ?? {}) as Record<string, unknown>;
 
@@ -132,11 +179,102 @@ export async function getUser(deps: UsersServiceDeps, id: string): Promise<UserD
     fullName: profile?.full_name ?? null,
     createdAt: user.created_at,
     mustResetPassword: appMetadata[MUST_RESET_PASSWORD_KEY] === true,
+    planSlug,
   };
 }
 
 /**
- * Aprovisiona un usuario de forma idempotente, setea su rol e inserta/actualiza su perfil.
+ * Acción de plan ya resuelta y validada, lista para aplicar sin riesgo de fallo de validación.
+ */
+type PlanAction = { kind: "noop" } | { kind: "delete" } | { kind: "upsert"; planId: number };
+
+/**
+ * Resuelve y VALIDA el plan a partir del slug SIN mutar estado.
+ *
+ * Se invoca al principio del flujo (antes de aprovisionar/actualizar) para que un slug
+ * inválido falle con 400 antes de tocar Auth, el perfil o enviar emails. De esta forma un
+ * `VALIDATION_ERROR` nunca deja efectos colaterales a medio aplicar.
+ */
+async function resolvePlanAction(
+  admin: AppSupabaseClient,
+  planSlug: string | null | undefined,
+): Promise<PlanAction> {
+  if (planSlug === undefined) {
+    return { kind: "noop" };
+  }
+
+  if (planSlug === null || planSlug === "") {
+    return { kind: "delete" };
+  }
+
+  const { data: plan, error: planError } = await admin
+    .from("investep_plans")
+    .select("id")
+    .eq("slug", planSlug)
+    .maybeSingle();
+
+  if (planError || !plan) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      `No se encontró el plan de la academia con slug: ${planSlug}`,
+      400,
+    );
+  }
+
+  return { kind: "upsert", planId: plan.id };
+}
+
+/**
+ * Aplica una acción de plan ya resuelta. No valida ni puede producir un 400: se invoca al
+ * final del flujo, cuando el resto de las mutaciones ya se aplicaron.
+ */
+async function applyPlanAction(admin: AppSupabaseClient, userId: string, action: PlanAction) {
+  if (action.kind === "noop") {
+    return;
+  }
+
+  if (action.kind === "delete") {
+    // Sin filtro de status a propósito: `onConflict: "user_id"` garantiza una única fila
+    // de membresía por usuario, así que borrar por user_id elimina la membresía vigente.
+    const { error: deleteError } = await admin
+      .from("academy_memberships")
+      .delete()
+      .eq("user_id", userId);
+
+    if (deleteError) {
+      throwPostgrestError(
+        deleteError,
+        "No se pudo eliminar la membresía del usuario.",
+        (deleteError as { status?: number }).status,
+      );
+    }
+    return;
+  }
+
+  const { error: upsertError } = await admin.from("academy_memberships").upsert(
+    {
+      user_id: userId,
+      investep_plan_id: action.planId,
+      status: "active",
+      source: "admin",
+      updated_at: new Date().toISOString(),
+    },
+    {
+      onConflict: "user_id",
+    },
+  );
+
+  if (upsertError) {
+    throwPostgrestError(
+      upsertError,
+      "No se pudo asignar/actualizar la membresía del usuario.",
+      (upsertError as { status?: number }).status,
+    );
+  }
+}
+
+/**
+ * Aprovisiona un usuario de forma idempotente, setea su rol e inserta/actualiza su perfil y plan.
  */
 export async function createUser(
   deps: UsersServiceCreateDeps,
@@ -145,8 +283,13 @@ export async function createUser(
     fullName?: string | null;
     role: "admin" | "manager" | "user";
     password?: string;
+    planSlug?: string | null;
   },
 ): Promise<UserDTO> {
+  // 0. Validar el plan ANTES de mutar nada: un slug inválido debe fallar con 400 sin
+  //    haber creado el usuario ni enviado el email de credenciales.
+  const planAction = await resolvePlanAction(deps.admin, input.planSlug);
+
   // 1. Aprovisionar usuario (creación / reset de contraseña y envío de email)
   const provisionResult = await provisionUser(
     { admin: deps.admin, sendEmail: deps.sendEmail },
@@ -188,6 +331,9 @@ export async function createUser(
     );
   }
 
+  // 3.5. Aplicar el plan ya resuelto (validado en el paso 0)
+  await applyPlanAction(deps.admin, userId, planAction);
+
   // 4. Devolver la entidad de usuario completa y actualizada
   return getUser(deps, userId);
 }
@@ -203,6 +349,7 @@ export async function updateUser(
     fullName?: string | null;
     role?: "admin" | "manager" | "user";
     password?: string;
+    planSlug?: string | null;
   },
 ): Promise<UserDTO> {
   // 1. Validar que el usuario exista
@@ -210,6 +357,10 @@ export async function updateUser(
   if (findError || !authData.user) {
     throw new AppError("NOT_FOUND", "Usuario no encontrado.", 404, undefined, { cause: findError });
   }
+
+  // 1.5. Validar el plan ANTES de mutar Auth/perfil: un slug inválido debe fallar con 400
+  //      sin haber aplicado ninguna otra actualización.
+  const planAction = await resolvePlanAction(deps.admin, input.planSlug);
 
   // 2. Actualizar Supabase Auth si es necesario
   const authUpdates: {
@@ -261,6 +412,9 @@ export async function updateUser(
       );
     }
   }
+
+  // 3.5. Aplicar el plan ya resuelto (validado en el paso 1.5)
+  await applyPlanAction(deps.admin, id, planAction);
 
   // 4. Retornar el usuario final
   return getUser(deps, id);
