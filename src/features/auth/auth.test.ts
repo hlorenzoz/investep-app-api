@@ -238,6 +238,100 @@ describe("GET /auth/me", () => {
 });
 
 /**
+ * Mock que rutea por URL para poder resolver el plan del usuario:
+ * - `GET /auth/v1/user`             → requireAuth (getUser).
+ * - `GET /rest/v1/academy_memberships` → getPlanSlug (PostgREST).
+ * Si `plan` es null, la query devuelve `{}` (0 filas embebidas) → planSlug null.
+ */
+function mockMeWithPlan(user: Record<string, unknown>, plan: { slug: string } | null) {
+  globalThis.fetch = mock(async (input: unknown) => {
+    const url = String(input);
+    if (url.includes("/rest/v1/academy_memberships")) {
+      const body = plan ? { investep_plans: { slug: plan.slug } } : {};
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify(user), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as unknown as typeof fetch;
+}
+
+describe("GET /auth/me — planSlug", () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("expone planSlug con el slug del plan activo del usuario", async () => {
+    mockMeWithPlan(
+      { id: "uid-plan", email: "gold@example.com", user_metadata: {} },
+      { slug: "gold" },
+    );
+
+    const res = await createApp().request(
+      "/auth/me",
+      { headers: { Authorization: "Bearer valid" } },
+      ENV,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { user: { planSlug: string | null } };
+    expect(body.user.planSlug).toBe("gold");
+  });
+
+  it("planSlug es null cuando el usuario no tiene membresía activa", async () => {
+    mockMeWithPlan({ id: "uid-free", email: "free@example.com", user_metadata: {} }, null);
+
+    const res = await createApp().request(
+      "/auth/me",
+      { headers: { Authorization: "Bearer valid" } },
+      ENV,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { user: { planSlug: string | null } };
+    expect(body.user.planSlug).toBeNull();
+  });
+
+  it("loguea y degrada a planSlug null cuando la query de plan falla", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    globalThis.fetch = mock(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/rest/v1/academy_memberships")) {
+        return new Response(
+          JSON.stringify({ code: "42P01", message: "boom", details: null, hint: null }),
+          { status: 400, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({ id: "uid-err", email: "err@example.com", user_metadata: {} }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    const res = await createApp().request(
+      "/auth/me",
+      { headers: { Authorization: "Bearer valid" } },
+      ENV,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { user: { planSlug: string | null } };
+    expect(body.user.planSlug).toBeNull();
+    // §12: el fallo del lookup deja rastro; nunca se traga en silencio.
+    const logged = errorSpy.mock.calls.some((c) =>
+      String(c[0]).includes("plan_slug_lookup_failed"),
+    );
+    expect(logged).toBe(true);
+    errorSpy.mockRestore();
+  });
+});
+
+/**
  * Mock de fetch para el flujo completo de change-password. Rutea por URL:
  * - `GET /auth/v1/user`          → requireAuth (anon client `getUser`).
  * - `PUT /auth/v1/admin/users/*` → admin `updateUserById`.
@@ -253,12 +347,21 @@ interface ChangePasswordCalls {
   adminUserIds: string[];
   /** Cantidad de `POST /auth/v1/logout` (revocación de sesiones). */
   logoutCount: number;
+  /** Cantidad de `GET /rest/v1/academy_memberships` (lookup de plan; no debe ocurrir acá). */
+  academyQueryCount: number;
 }
 
 function mockChangePassword(cfg: { updateErrorStatus?: number } = {}): ChangePasswordCalls {
-  const calls: ChangePasswordCalls = { adminUserIds: [], logoutCount: 0 };
+  const calls: ChangePasswordCalls = { adminUserIds: [], logoutCount: 0, academyQueryCount: 0 };
   globalThis.fetch = mock(async (input: unknown) => {
     const url = String(input);
+    if (url.includes("/rest/v1/academy_memberships")) {
+      calls.academyQueryCount++;
+      return new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
     if (url.includes("/auth/v1/admin/users/")) {
       const match = url.match(/\/auth\/v1\/admin\/users\/([^/?]+)/);
       if (match?.[1]) calls.adminUserIds.push(match[1]);
@@ -336,6 +439,20 @@ describe("POST /auth/change-password", () => {
     // Se le cambió la clave al usuario del token y se revocaron sus sesiones (1 logout).
     expect(calls.adminUserIds).toEqual([CP_UUID]);
     expect(calls.logoutCount).toBe(1);
+  });
+
+  // El endpoint revoca TODAS las sesiones → el cliente DEBE re-loguear, y `/auth/me` ya
+  // resuelve el plan fresco. Enriquecer la respuesta con planSlug acá es trabajo tirado:
+  // no debe haber round-trip a academy_memberships.
+  it("no consulta el plan del usuario (academy_memberships) — evita un round-trip inútil", async () => {
+    const calls = mockChangePassword();
+    const res = await createApp().request(
+      "/auth/change-password",
+      { ...JSON_AUTH, body: JSON.stringify({ newPassword: "nueva-clave-segura" }) },
+      ENV,
+    );
+    expect(res.status).toBe(200);
+    expect(calls.academyQueryCount).toBe(0);
   });
 
   // CRITICAL (authz, §11): el userId DEBE salir del token, jamás del body. Si el cliente
