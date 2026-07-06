@@ -1,0 +1,29 @@
+[
+  {
+    "slug": "tastytrade",
+    "name": "tastytrade",
+    "url": "https://tastytrade.com/",
+    "url_secondary": null,
+    "logo": "brokers/tastytrade-logo.webp",
+    "favicon": "brokers/tastytrade-favicon-32x32.png",
+    "icon": "brokers/tastytrade-icon-144x144.png"
+  },
+  {
+    "slug": "interactive-brokers",
+    "name": "Interactive Brokers",
+    "url": "https://www.interactivebrokers.com/",
+    "url_secondary": "https://www.interactivebrokers.ie/",
+    "logo": "brokers/interactive-brokers-logo.svg",
+    "favicon": "brokers/interactive-brokers-icon-128x128.png",
+    "icon": "brokers/interactive-brokers-icon-128x128.png"
+  },
+  {
+    "slug": "etrade",
+    "name": "eTrade",
+    "url": "https://us.etrade.com/",
+    "url_secondary": null,
+    "logo": "brokers/etrade-from-morgan-stanley-logo-dark-theme.svg",
+    "favicon": "brokers/etrade-from-morgan-stanley-logo-light-theme.svg",
+    "icon": "brokers/etrade-from-morgan-stanley-logo-light-theme.svg"
+  }
+]

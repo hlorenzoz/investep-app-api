@@ -106,6 +106,11 @@ create-demo-user ENV="":
 populate-tienda ENV="":
     bun run scripts/populate-tienda.ts {{ENV}}
 
+# Siembra/actualiza el catálogo de brókers desde scripts/data/brokers.json
+# (manifiesto editable a mano). Idempotente (upsert por slug). ENV opcional.
+populate-brokers ENV="":
+    bun run scripts/populate-brokers.ts {{ENV}}
+
 # Obtiene un access_token JWT para el usuario indicado (o el bootstrap por defecto).
 token EMAIL="" PASSWORD="":
     bun run scripts/get-token.ts {{EMAIL}} {{PASSWORD}}
