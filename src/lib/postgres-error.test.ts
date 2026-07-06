@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { AppError } from "./errors";
 import {
+  isCheckViolation,
   isTransientPostgrestError,
+  throwCheckViolationAs422,
   throwPostgrestError,
   throwSupabaseAuthError,
 } from "./postgres-error";
@@ -115,6 +117,58 @@ describe("throwSupabaseAuthError", () => {
     } catch (err) {
       expect((err as AppError).cause).toBe(cause);
       expect((err as AppError).details).toBeUndefined();
+    }
+  });
+});
+
+describe("isCheckViolation", () => {
+  it("true en SQLSTATE 23514 (violación de CHECK)", () => {
+    expect(isCheckViolation({ code: "23514" })).toBe(true);
+  });
+
+  it("false en otros códigos o ausencia de código", () => {
+    expect(isCheckViolation({ code: "23505" })).toBe(false);
+    expect(isCheckViolation({})).toBe(false);
+    expect(isCheckViolation(null)).toBe(false);
+  });
+});
+
+describe("throwCheckViolationAs422", () => {
+  const INVALID_MSG = "Definí un precio o un enlace de Amazon (al menos uno).";
+  const FALLBACK_MSG = "No se pudo crear el producto.";
+
+  it("CHECK violation (23514) → AppError VALIDATION_ERROR 422 con invalidMessage", () => {
+    try {
+      throwCheckViolationAs422({ code: "23514" }, INVALID_MSG, FALLBACK_MSG);
+      throw new Error("debería haber lanzado");
+    } catch (err) {
+      expect(err).toBeInstanceOf(AppError);
+      expect((err as AppError).code).toBe("VALIDATION_ERROR");
+      expect((err as AppError).status).toBe(422);
+      expect((err as AppError).message).toBe(INVALID_MSG);
+    }
+  });
+
+  it("no es CHECK violation → delega a throwPostgrestError (503 en outage transitorio)", () => {
+    try {
+      throwCheckViolationAs422({ code: "" }, INVALID_MSG, FALLBACK_MSG, 500);
+      throw new Error("debería haber lanzado");
+    } catch (err) {
+      expect(err).toBeInstanceOf(AppError);
+      expect((err as AppError).code).toBe("SERVICE_UNAVAILABLE");
+      expect((err as AppError).status).toBe(503);
+    }
+  });
+
+  it("no es CHECK violation y status es 4xx genuino → delega a INTERNAL_ERROR 500 con fallbackMessage", () => {
+    try {
+      throwCheckViolationAs422({ code: "23505" }, INVALID_MSG, FALLBACK_MSG, 409);
+      throw new Error("debería haber lanzado");
+    } catch (err) {
+      expect(err).toBeInstanceOf(AppError);
+      expect((err as AppError).code).toBe("INTERNAL_ERROR");
+      expect((err as AppError).status).toBe(500);
+      expect((err as AppError).message).toBe(FALLBACK_MSG);
     }
   });
 });

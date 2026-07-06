@@ -101,6 +101,11 @@ create-users-by-plan ENV="":
 create-demo-user ENV="":
     bun run scripts/create-demo-user.ts {{ENV}}
 
+# Siembra/actualiza el catálogo de la tienda desde scripts/data/tienda-products.json
+# (manifiesto editable a mano). Idempotente (upsert por slug). ENV opcional.
+populate-tienda ENV="":
+    bun run scripts/populate-tienda.ts {{ENV}}
+
 # Obtiene un access_token JWT para el usuario indicado (o el bootstrap por defecto).
 token EMAIL="" PASSWORD="":
     bun run scripts/get-token.ts {{EMAIL}} {{PASSWORD}}

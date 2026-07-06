@@ -527,6 +527,57 @@ export type Database = {
         }
         Relationships: []
       }
+      products: {
+        Row: {
+          active: boolean
+          amazon_url: string | null
+          category: string
+          created_at: string
+          currency: string
+          description: string | null
+          gender: string | null
+          id: number
+          image: string | null
+          name: string
+          price: number | null
+          slug: string
+          theme: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          amazon_url?: string | null
+          category: string
+          created_at?: string
+          currency?: string
+          description?: string | null
+          gender?: string | null
+          id?: never
+          image?: string | null
+          name: string
+          price?: number | null
+          slug: string
+          theme?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          amazon_url?: string | null
+          category?: string
+          created_at?: string
+          currency?: string
+          description?: string | null
+          gender?: string | null
+          id?: never
+          image?: string | null
+          name?: string
+          price?: number | null
+          slug?: string
+          theme?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string

@@ -6,6 +6,9 @@ const PG_UNIQUE_VIOLATION = "23505";
 /** SQLSTATE de Postgres para violación de FOREIGN KEY (fila referenciada). */
 const PG_FOREIGN_KEY_VIOLATION = "23503";
 
+/** SQLSTATE de Postgres para violación de CHECK constraint. */
+const PG_CHECK_VIOLATION = "23514";
+
 /**
  * ¿El error del data-layer es una violación de UNIQUE (duplicado)? PostgREST
  * propaga el SQLSTATE de Postgres en `error.code`. Se usa para mapear un insert
@@ -23,6 +26,16 @@ export function isUniqueViolation(cause: unknown): boolean {
  */
 export function isForeignKeyViolation(cause: unknown): boolean {
   return (cause as { code?: string } | null)?.code === PG_FOREIGN_KEY_VIOLATION;
+}
+
+/**
+ * ¿El error es una violación de CHECK constraint? Se usa cuando una regla de negocio
+ * enforced a nivel DB (defense in depth, p. ej. price-o-amazon-url de `products`) rechaza
+ * un insert/update que el refine de Zod no llegó a atajar (PATCH parcial que deja un estado
+ * inválido). Se mapea a `VALIDATION_ERROR` (422) en vez del 500 genérico.
+ */
+export function isCheckViolation(cause: unknown): boolean {
+  return (cause as { code?: string } | null)?.code === PG_CHECK_VIOLATION;
 }
 
 /**
@@ -70,6 +83,24 @@ export function throwForeignKeyAs422(
 ): never {
   if (isForeignKeyViolation(cause)) {
     throw new AppError("VALIDATION_ERROR", invalidRefMessage, 422);
+  }
+  throwPostgrestError(cause, fallbackMessage, status);
+}
+
+/**
+ * CHECK violation (23514) al insertar/actualizar una fila que rompe una regla de negocio
+ * enforced en la DB (defense in depth): es input inválido → `VALIDATION_ERROR` (422), no un
+ * 500 genérico. El resto cae al mapeo estándar de `throwPostgrestError`. Mismo patrón que
+ * `throwForeignKeyAs422` (DRY, ver `products.service.ts`).
+ */
+export function throwCheckViolationAs422(
+  cause: unknown,
+  invalidMessage: string,
+  fallbackMessage: string,
+  status?: number,
+): never {
+  if (isCheckViolation(cause)) {
+    throw new AppError("VALIDATION_ERROR", invalidMessage, 422);
   }
   throwPostgrestError(cause, fallbackMessage, status);
 }

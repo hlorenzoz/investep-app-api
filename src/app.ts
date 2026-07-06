@@ -12,6 +12,7 @@ import { healthRouter } from "./features/health/health.router";
 import { operationsRouter } from "./features/operations";
 import { adminPlansRouter, plansRouter } from "./features/plans";
 import { portfolioRouter } from "./features/portfolio";
+import { adminProductsRouter, productsRouter } from "./features/products";
 import { projectionsRouter } from "./features/projections";
 import { adminTickersRouter, tickersRouter } from "./features/tickers";
 import { adminUsersRouter } from "./features/users";
@@ -53,6 +54,7 @@ export function createApp() {
   app.route("/brokers", brokersRouter);
   app.route("/tickers", tickersRouter);
   app.route("/academy/plans", academyRouter);
+  app.route("/tienda", productsRouter);
 
   // --- Admin: CRUD de catálogos, protegido por `requireAdmin` (AGENTS.md §5/§6) ---
   app.route("/admin/brokers", adminBrokersRouter);
@@ -60,6 +62,7 @@ export function createApp() {
   app.route("/admin/tickers", adminTickersRouter);
   app.route("/admin/academy", adminAcademyRouter);
   app.route("/admin/users", adminUsersRouter);
+  app.route("/admin/tienda", adminProductsRouter);
 
   // Esquema de seguridad para el spec OpenAPI (Bearer JWT de Supabase Auth).
   app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
