@@ -599,6 +599,45 @@ export type Database = {
         }
         Relationships: []
       }
+      recommended_books: {
+        Row: {
+          author: string
+          created_at: string
+          description: string
+          id: number
+          image: string
+          slug: string
+          sort_order: number
+          title: string
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          author: string
+          created_at?: string
+          description: string
+          id?: never
+          image: string
+          slug: string
+          sort_order?: number
+          title: string
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          author?: string
+          created_at?: string
+          description?: string
+          id?: never
+          image?: string
+          slug?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
       ticker_relations: {
         Row: {
           created_at: string

@@ -111,6 +111,11 @@ populate-tienda ENV="":
 populate-brokers ENV="":
     bun run scripts/populate-brokers.ts {{ENV}}
 
+# Siembra/actualiza los libros recomendados desde scripts/data/books.json
+# (manifiesto editable a mano). Idempotente (upsert por slug). ENV opcional.
+populate-recommended-books ENV="":
+    bun run scripts/populate-recommended-books.ts {{ENV}}
+
 # Obtiene un access_token JWT para el usuario indicado (o el bootstrap por defecto).
 token EMAIL="" PASSWORD="":
     bun run scripts/get-token.ts {{EMAIL}} {{PASSWORD}}
