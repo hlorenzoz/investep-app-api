@@ -21,6 +21,8 @@ export interface UserDTO {
   createdAt: string;
   mustResetPassword: boolean;
   planSlug: string | null;
+  phone: string | null;
+  country: string | null;
 }
 
 /**
@@ -47,7 +49,7 @@ export async function listUsers(deps: UsersServiceDeps): Promise<UserDTO[]> {
   //    `perPage: 1000` del listado de Auth.
   const { data: profiles, error: profilesError } = await deps.admin
     .from("profiles")
-    .select("id, full_name")
+    .select("id, full_name, phone, country")
     .limit(POSTGREST_MAX_ROWS);
 
   if (profilesError) {
@@ -60,8 +62,14 @@ export async function listUsers(deps: UsersServiceDeps): Promise<UserDTO[]> {
     );
   }
 
-  const profilesMap = new Map<string, string | null>(
-    (profiles ?? []).map((p) => [p.id, p.full_name]),
+  const profilesMap = new Map<
+    string,
+    { fullName: string | null; phone: string | null; country: string | null }
+  >(
+    (profiles ?? []).map((p) => [
+      p.id,
+      { fullName: p.full_name, phone: p.phone, country: p.country },
+    ]),
   );
 
   // 3. Obtener membresías de academy_memberships. Mismo límite explícito que profiles.
@@ -92,14 +100,17 @@ export async function listUsers(deps: UsersServiceDeps): Promise<UserDTO[]> {
   // 4. Combinar todos los listados
   return authData.users.map((user) => {
     const appMetadata = (user.app_metadata ?? {}) as Record<string, unknown>;
+    const profile = profilesMap.get(user.id);
     return {
       id: user.id,
       email: user.email ?? "",
       role: resolveRole(appMetadata),
-      fullName: profilesMap.get(user.id) ?? null,
+      fullName: profile?.fullName ?? null,
       createdAt: user.created_at,
       mustResetPassword: appMetadata[MUST_RESET_PASSWORD_KEY] === true,
       planSlug: membershipsMap.get(user.id) ?? null,
+      phone: profile?.phone ?? null,
+      country: profile?.country ?? null,
     };
   });
 }
@@ -119,7 +130,7 @@ export async function getUser(deps: UsersServiceDeps, id: string): Promise<UserD
   // 2. Obtener perfil
   const { data: profile, error: profileError } = await deps.admin
     .from("profiles")
-    .select("full_name")
+    .select("full_name, phone, country")
     .eq("id", id)
     .maybeSingle();
 
@@ -165,6 +176,8 @@ export async function getUser(deps: UsersServiceDeps, id: string): Promise<UserD
     createdAt: user.created_at,
     mustResetPassword: appMetadata[MUST_RESET_PASSWORD_KEY] === true,
     planSlug,
+    phone: profile?.phone ?? null,
+    country: profile?.country ?? null,
   };
 }
 
@@ -269,6 +282,8 @@ export async function createUser(
     role: "admin" | "manager" | "user";
     password?: string;
     planSlug?: string | null;
+    phone?: string | null;
+    country?: string | null;
   },
 ): Promise<UserDTO> {
   // 0. Validar el plan ANTES de mutar nada: un slug inválido debe fallar con 400 sin
@@ -301,10 +316,12 @@ export async function createUser(
     );
   }
 
-  // 3. Crear/actualizar perfil en la DB
+  // 3. Crear/actualizar perfil en la DB (incluye phone/country del alta)
   const { error: profileError } = await deps.admin.from("profiles").upsert({
     id: userId,
     full_name: input.fullName ?? null,
+    phone: input.phone ?? null,
+    country: input.country ?? null,
     updated_at: new Date().toISOString(),
   });
 
@@ -335,6 +352,8 @@ export async function updateUser(
     role?: "admin" | "manager" | "user";
     password?: string;
     planSlug?: string | null;
+    phone?: string | null;
+    country?: string | null;
   },
 ): Promise<UserDTO> {
   // 1. Validar que el usuario exista
@@ -347,7 +366,8 @@ export async function updateUser(
   //      sin haber aplicado ninguna otra actualización.
   const planAction = await resolvePlanAction(deps.admin, input.planSlug);
 
-  // 2. Actualizar Supabase Auth si es necesario
+  // 2. Actualizar Supabase Auth si es necesario. phone/country NO viven acá: son datos de
+  //    perfil y se escriben en `profiles` (paso 3), no en Auth.
   const authUpdates: {
     email?: string;
     password?: string;
@@ -383,11 +403,22 @@ export async function updateUser(
     }
   }
 
-  // 3. Actualizar perfil si fullName está presente en el input
-  if (input.fullName !== undefined) {
-    const { error: profileError } = await deps.admin
-      .from("profiles")
-      .upsert({ id, full_name: input.fullName, updated_at: new Date().toISOString() });
+  // 3. Actualizar perfil si cambió algún dato de perfil (fullName/phone/country). El upsert
+  //    incluye SOLO las claves presentes en el input (un `undefined` = "no tocar"), así un
+  //    PATCH de phone no pisa el full_name existente.
+  if (input.fullName !== undefined || input.phone !== undefined || input.country !== undefined) {
+    const profilePatch: {
+      id: string;
+      updated_at: string;
+      full_name?: string | null;
+      phone?: string | null;
+      country?: string | null;
+    } = { id, updated_at: new Date().toISOString() };
+    if (input.fullName !== undefined) profilePatch.full_name = input.fullName;
+    if (input.phone !== undefined) profilePatch.phone = input.phone;
+    if (input.country !== undefined) profilePatch.country = input.country;
+
+    const { error: profileError } = await deps.admin.from("profiles").upsert(profilePatch);
 
     if (profileError) {
       throwPostgrestError(

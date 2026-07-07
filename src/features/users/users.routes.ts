@@ -10,6 +10,8 @@ export const UserSchema = z
     createdAt: z.string().openapi({ example: "2026-06-30T16:28:24.000Z" }),
     mustResetPassword: z.boolean().openapi({ example: false }),
     planSlug: z.string().nullable().optional().openapi({ example: "bronze" }),
+    phone: z.string().nullable().openapi({ example: "+34 600 000 000" }),
+    country: z.string().nullable().openapi({ example: "España" }),
   })
   .openapi("User");
 
@@ -32,6 +34,8 @@ export const CreateUserSchema = z
     role: z.enum(["admin", "manager", "user"]).default("user").openapi({ example: "user" }),
     password: z.string().min(8).optional().openapi({ example: "contraseñaSegura123" }),
     planSlug: z.string().nullable().optional().openapi({ example: "bronze" }),
+    phone: z.string().nullable().optional().openapi({ example: "+34 600 000 000" }),
+    country: z.string().nullable().optional().openapi({ example: "España" }),
   })
   .openapi("CreateUser");
 
@@ -42,6 +46,8 @@ export const UpdateUserSchema = z
     role: z.enum(["admin", "manager", "user"]).optional().openapi({ example: "manager" }),
     password: z.string().min(8).optional().openapi({ example: "nuevaContraseñaSegura123" }),
     planSlug: z.string().nullable().optional().openapi({ example: "bronze" }),
+    phone: z.string().nullable().optional().openapi({ example: "+34 600 000 000" }),
+    country: z.string().nullable().optional().openapi({ example: "España" }),
   })
   .openapi("UpdateUser");
 
@@ -114,7 +120,7 @@ export const createUserRoute = createRoute({
     "1. **Creación**: Si el email no existe, crea la cuenta en Supabase Auth con confirmación automática. " +
     "2. **Idempotencia**: Si el email ya está registrado, reinicia su contraseña con el nuevo valor (o una aleatoria si no se especifica). " +
     "3. **Metadatos y Rol**: Escribe el rol provisto (`admin`, `manager`, `user`) y activa `must_reset_password: true` en los metadatos protegidos de Supabase Auth (`app_metadata`). " +
-    "4. **Perfil**: Registra o actualiza el nombre del usuario (`fullName`) en la tabla `public.profiles`. " +
+    "4. **Perfil**: Registra o actualiza el nombre (`fullName`), teléfono (`phone`) y país (`country`) del usuario en la tabla `public.profiles`. " +
     "5. **Notificación**: Envía un correo electrónico transaccional mediante Resend con las credenciales de acceso iniciales. " +
     "**Restringido únicamente a administradores (rol `admin`)**.",
   security: [{ bearerAuth: [] }],
@@ -152,7 +158,7 @@ export const updateUserRoute = createRoute({
   summary: "Actualizar un usuario",
   description:
     "Modifica de forma parcial y segura las propiedades de un usuario existente identificado por su UUID. " +
-    "- Permite actualizar su email, rol administrativo (`admin`, `manager`, `user`) y su nombre completo (`fullName`). " +
+    "- Permite actualizar su email, rol administrativo (`admin`, `manager`, `user`), nombre completo (`fullName`), teléfono (`phone`) y país (`country`). Los datos de perfil se guardan en `public.profiles`. " +
     "- Si se provee una contraseña en el campo `password`, se cambia en Supabase Auth y se activa automáticamente el flag `must_reset_password: true` para exigir el cambio de clave en su próximo login. " +
     "**Restringido únicamente a administradores (rol `admin`)**.",
   security: [{ bearerAuth: [] }],

@@ -26,9 +26,14 @@ const UUID_NONEXISTENT = "00000000-0000-0000-0000-000000000000";
 
 // Datos simulados
 const mockProfiles = [
-  { id: UUID_ADMIN, full_name: "Administrador General" },
-  { id: UUID_MANAGER, full_name: "Gerente Operativo" },
-  { id: UUID_USER1, full_name: "Usuario Común" },
+  {
+    id: UUID_ADMIN,
+    full_name: "Administrador General",
+    phone: "+34 600 111 222",
+    country: "España",
+  },
+  { id: UUID_MANAGER, full_name: "Gerente Operativo", phone: null, country: "México" },
+  { id: UUID_USER1, full_name: "Usuario Común", phone: null, country: null },
 ];
 
 const mockAuthUsers = [
@@ -164,6 +169,8 @@ function setupFetchMocks(
           const profile = mockProfiles.find((p) => p.id === id) || {
             id: UUID_NEW_USER,
             full_name: "Nuevo Aprovisionado",
+            phone: null,
+            country: null,
           };
           return new Response(JSON.stringify([profile]), { status: 200 });
         }
@@ -279,6 +286,8 @@ describe("CRUD de Usuarios y Roles (Admin)", () => {
         createdAt: string;
         mustResetPassword: boolean;
         planSlug: string | null;
+        phone: string | null;
+        country: string | null;
       }[];
     };
     expect(body.users.length).toBe(3);
@@ -288,12 +297,17 @@ describe("CRUD de Usuarios y Roles (Admin)", () => {
     expect(adminUser?.role).toBe("admin");
     expect(adminUser?.fullName).toBe("Administrador General");
     expect(adminUser?.planSlug).toBe("platinum");
+    // phone/country vienen de la tabla profiles, no de Auth.
+    expect(adminUser?.phone).toBe("+34 600 111 222");
+    expect(adminUser?.country).toBe("España");
 
     const managerUser = body.users.find((u) => u.id === UUID_MANAGER);
     expect(managerUser).toBeDefined();
     expect(managerUser?.role).toBe("manager");
     expect(managerUser?.fullName).toBe("Gerente Operativo");
     expect(managerUser?.planSlug).toBe("gold");
+    expect(managerUser?.phone).toBeNull();
+    expect(managerUser?.country).toBe("México");
 
     // Condición límite (AGENTS.md §11): las queries de profiles y memberships llevan
     // el cap explícito POSTGREST_MAX_ROWS — sin él la truncación del server es invisible.
@@ -345,6 +359,8 @@ describe("CRUD de Usuarios y Roles (Admin)", () => {
         createdAt: string;
         mustResetPassword: boolean;
         planSlug: string | null;
+        phone: string | null;
+        country: string | null;
       };
     };
     expect(body.user.id).toBe(UUID_MANAGER);
@@ -353,6 +369,9 @@ describe("CRUD de Usuarios y Roles (Admin)", () => {
     expect(body.user.fullName).toBe("Gerente Operativo");
     // En setupFetchMocks, UUID_MANAGER no retorna membresía (solo UUID_ADMIN retorna platinum)
     expect(body.user.planSlug).toBeNull();
+    // phone/country provienen del perfil en la DB (profiles), no de Auth.
+    expect(body.user.phone).toBeNull();
+    expect(body.user.country).toBe("México");
   });
 
   it("404 si el usuario no existe", async () => {
@@ -451,6 +470,91 @@ describe("CRUD de Usuarios y Roles (Admin)", () => {
       };
     };
     expect(body.user.id).toBe(UUID_MANAGER);
+  });
+
+  it("200 actualiza phone/country escribiéndolos en profiles, no en Auth", async () => {
+    const fetchMock = setupFetchMocks();
+    const payload = { phone: "+1 555 000 111", country: "Estados Unidos" };
+
+    const res = await createApp().request(
+      `/admin/users/${UUID_MANAGER}`,
+      {
+        method: "PATCH",
+        headers: { ...AUTH_ADMIN, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+      ENV,
+    );
+
+    expect(res.status).toBe(200);
+
+    // Se escribió el perfil (upsert = POST a PostgREST) con phone/country.
+    const profileUpserts = callsTo(fetchMock, "/rest/v1/profiles", "POST");
+    expect(profileUpserts.length).toBe(1);
+    const upsertBody = JSON.parse((profileUpserts[0]?.[1]?.body as string) ?? "{}");
+    expect(upsertBody.id).toBe(UUID_MANAGER);
+    expect(upsertBody.phone).toBe("+1 555 000 111");
+    expect(upsertBody.country).toBe("Estados Unidos");
+
+    // NO se tocó Auth con phone/country: sin email/rol/password, no hay PATCH a Auth.
+    const authPatches = callsTo(fetchMock, `/auth/v1/admin/users/${UUID_MANAGER}`, "PUT").concat(
+      callsTo(fetchMock, `/auth/v1/admin/users/${UUID_MANAGER}`, "PATCH"),
+    );
+    for (const [, init] of authPatches) {
+      const authBody = JSON.parse((init?.body as string) ?? "{}");
+      expect(authBody.phone).toBeUndefined();
+    }
+  });
+
+  it("200 limpia phone/country cuando se envían null", async () => {
+    const fetchMock = setupFetchMocks();
+    const payload = { phone: null, country: null };
+
+    const res = await createApp().request(
+      `/admin/users/${UUID_ADMIN}`,
+      {
+        method: "PATCH",
+        headers: { ...AUTH_ADMIN, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+      ENV,
+    );
+
+    expect(res.status).toBe(200);
+    const profileUpserts = callsTo(fetchMock, "/rest/v1/profiles", "POST");
+    expect(profileUpserts.length).toBe(1);
+    const upsertBody = JSON.parse((profileUpserts[0]?.[1]?.body as string) ?? "{}");
+    expect(upsertBody.phone).toBeNull();
+    expect(upsertBody.country).toBeNull();
+  });
+
+  it("201 aprovisiona un usuario con phone/country y los guarda en profiles", async () => {
+    const fetchMock = setupFetchMocks();
+    const payload = {
+      email: "conperfil@example.com",
+      fullName: "Con Perfil",
+      role: "user",
+      phone: "+52 55 1234 5678",
+      country: "México",
+    };
+
+    const res = await createApp().request(
+      "/admin/users",
+      {
+        method: "POST",
+        headers: { ...AUTH_ADMIN, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+      ENV,
+    );
+
+    expect(res.status).toBe(201);
+
+    const profileUpserts = callsTo(fetchMock, "/rest/v1/profiles", "POST");
+    expect(profileUpserts.length).toBeGreaterThanOrEqual(1);
+    const upsertBody = JSON.parse((profileUpserts[0]?.[1]?.body as string) ?? "{}");
+    expect(upsertBody.phone).toBe("+52 55 1234 5678");
+    expect(upsertBody.country).toBe("México");
   });
 
   // --- DELETE /admin/users/:id (Eliminar) ---
