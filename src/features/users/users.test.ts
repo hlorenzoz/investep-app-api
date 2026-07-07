@@ -528,6 +528,56 @@ describe("CRUD de Usuarios y Roles (Admin)", () => {
     expect(upsertBody.country).toBeNull();
   });
 
+  it("200 coacciona phone/country vacíos ('') a null al actualizar", async () => {
+    const fetchMock = setupFetchMocks();
+    const payload = { phone: "", country: "" };
+
+    const res = await createApp().request(
+      `/admin/users/${UUID_ADMIN}`,
+      {
+        method: "PATCH",
+        headers: { ...AUTH_ADMIN, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+      ENV,
+    );
+
+    expect(res.status).toBe(200);
+    const profileUpserts = callsTo(fetchMock, "/rest/v1/profiles", "POST");
+    expect(profileUpserts.length).toBe(1);
+    const upsertBody = JSON.parse((profileUpserts[0]?.[1]?.body as string) ?? "{}");
+    // "" se normaliza a null: una sola representación de "sin dato".
+    expect(upsertBody.phone).toBeNull();
+    expect(upsertBody.country).toBeNull();
+  });
+
+  it("201 aprovisiona un usuario con phone/country vacíos guardándolos como null", async () => {
+    const fetchMock = setupFetchMocks();
+    const payload = {
+      email: "vacios@example.com",
+      role: "user",
+      phone: "",
+      country: "",
+    };
+
+    const res = await createApp().request(
+      "/admin/users",
+      {
+        method: "POST",
+        headers: { ...AUTH_ADMIN, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+      ENV,
+    );
+
+    expect(res.status).toBe(201);
+    const profileUpserts = callsTo(fetchMock, "/rest/v1/profiles", "POST");
+    expect(profileUpserts.length).toBeGreaterThanOrEqual(1);
+    const upsertBody = JSON.parse((profileUpserts[0]?.[1]?.body as string) ?? "{}");
+    expect(upsertBody.phone).toBeNull();
+    expect(upsertBody.country).toBeNull();
+  });
+
   it("201 aprovisiona un usuario con phone/country y los guarda en profiles", async () => {
     const fetchMock = setupFetchMocks();
     const payload = {

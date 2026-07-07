@@ -320,8 +320,9 @@ export async function createUser(
   const { error: profileError } = await deps.admin.from("profiles").upsert({
     id: userId,
     full_name: input.fullName ?? null,
-    phone: input.phone ?? null,
-    country: input.country ?? null,
+    // `|| null` normaliza el string vacío a null (misma regla que updateUser).
+    phone: input.phone || null,
+    country: input.country || null,
     updated_at: new Date().toISOString(),
   });
 
@@ -414,9 +415,10 @@ export async function updateUser(
       phone?: string | null;
       country?: string | null;
     } = { id, updated_at: new Date().toISOString() };
+    // `|| null` normaliza el string vacío a null: una sola representación de "sin dato".
     if (input.fullName !== undefined) profilePatch.full_name = input.fullName;
-    if (input.phone !== undefined) profilePatch.phone = input.phone;
-    if (input.country !== undefined) profilePatch.country = input.country;
+    if (input.phone !== undefined) profilePatch.phone = input.phone || null;
+    if (input.country !== undefined) profilePatch.country = input.country || null;
 
     const { error: profileError } = await deps.admin.from("profiles").upsert(profilePatch);
 
