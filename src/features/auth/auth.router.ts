@@ -1,6 +1,7 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { validationHook } from "../../lib/openapi";
 import { requireAuth } from "../../middleware/auth";
+import { createRateLimitMiddleware } from "../../middleware/rate-limit";
 import type { AuthedBindings } from "../../types/app";
 import { changePasswordHandler, meHandler } from "./auth.handlers";
 import { changePasswordRoute, meRoute } from "./auth.routes";
@@ -14,6 +15,16 @@ import { changePasswordRoute, meRoute } from "./auth.routes";
 export const authRouter = new OpenAPIHono<AuthedBindings>({
   defaultHook: validationHook<AuthedBindings>(),
 });
+
+// Rate limiting por IP en TODO el dominio auth, ANTES de requireAuth: frena
+// fuerza bruta pre-autenticación. El router es dueño de su propia protección.
+authRouter.use(
+  "*",
+  createRateLimitMiddleware({
+    name: "AUTH_RATE_LIMITER",
+    getLimiter: (env) => env.AUTH_RATE_LIMITER,
+  }),
+);
 
 // Protege /auth/me: valida el JWT antes de ejecutar el handler.
 authRouter.use("/me", requireAuth);

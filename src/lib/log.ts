@@ -16,3 +16,9 @@ export type LogContext = Record<string, string | number | boolean | null | undef
 export function logError(event: string, context?: LogContext): void {
   console.error(JSON.stringify({ level: "error", event, ...context }));
 }
+
+/** Emite un evento de advertencia estructurado (una línea JSON). Para degradaciones no fatales
+ * (p. ej. un binding opcional ausente) que deben ser visibles en observabilidad sin cortar tráfico. */
+export function logWarn(event: string, context?: LogContext): void {
+  console.warn(JSON.stringify({ level: "warn", event, ...context }));
+}

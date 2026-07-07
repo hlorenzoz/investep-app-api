@@ -1,8 +1,8 @@
 import { AppError } from "../../lib/errors";
 import { throwPostgrestError, throwSupabaseAuthError } from "../../lib/postgres-error";
 import type { SendEmailParams, SendEmailResult } from "../../lib/resend";
-import type { AppSupabaseClient } from "../../lib/supabase";
-import { IS_ADMIN_KEY, MUST_RESET_PASSWORD_KEY } from "../auth/metadata";
+import { type AppSupabaseClient, POSTGREST_MAX_ROWS } from "../../lib/supabase";
+import { IS_ADMIN_KEY, MUST_RESET_PASSWORD_KEY, resolveRole } from "../auth/metadata";
 import { provisionUser } from "../auth/user-provisioning";
 
 export interface UsersServiceDeps {
@@ -21,24 +21,6 @@ export interface UserDTO {
   createdAt: string;
   mustResetPassword: boolean;
   planSlug: string | null;
-}
-
-/**
- * Obtiene el rol a partir de app_metadata de Supabase Auth.
- * Mantiene la compatibilidad con el flag `is_admin`.
- */
-function resolveRole(appMetadata: Record<string, unknown>): "admin" | "manager" | "user" {
-  const role = appMetadata.role as string | undefined;
-  if (role === "admin" || role === "manager" || role === "user") {
-    return role;
-  }
-  if (appMetadata[IS_ADMIN_KEY] === true) {
-    return "admin";
-  }
-  if (appMetadata.is_manager === true) {
-    return "manager";
-  }
-  return "user";
 }
 
 /**
@@ -61,10 +43,12 @@ export async function listUsers(deps: UsersServiceDeps): Promise<UserDTO[]> {
     );
   }
 
-  // 2. Obtener perfiles de la tabla profiles
+  // 2. Obtener perfiles de la tabla profiles. Límite explícito alineado con el
+  //    `perPage: 1000` del listado de Auth.
   const { data: profiles, error: profilesError } = await deps.admin
     .from("profiles")
-    .select("id, full_name");
+    .select("id, full_name")
+    .limit(POSTGREST_MAX_ROWS);
 
   if (profilesError) {
     throw new AppError(
@@ -80,11 +64,12 @@ export async function listUsers(deps: UsersServiceDeps): Promise<UserDTO[]> {
     (profiles ?? []).map((p) => [p.id, p.full_name]),
   );
 
-  // 3. Obtener membresías de academy_memberships
+  // 3. Obtener membresías de academy_memberships. Mismo límite explícito que profiles.
   const { data: memberships, error: membershipsError } = await deps.admin
     .from("academy_memberships")
     .select("user_id, investep_plans(slug)")
-    .eq("status", "active");
+    .eq("status", "active")
+    .limit(POSTGREST_MAX_ROWS);
 
   if (membershipsError) {
     throw new AppError(

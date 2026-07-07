@@ -1,6 +1,6 @@
 import { AppError } from "../../lib/errors";
 import { throwForeignKeyAs422, throwPostgrestError } from "../../lib/postgres-error";
-import type { AppSupabaseClient } from "../../lib/supabase";
+import { type AppSupabaseClient, POSTGREST_MAX_ROWS } from "../../lib/supabase";
 import type { Database } from "../../types/database.types";
 
 export type AccountType = "equity" | "options";
@@ -204,7 +204,9 @@ export function createSupabaseOperationsRepository(admin: AppSupabaseClient): Op
       } else if (filter?.status === "closed") {
         query = query.not("sold_at", "is", null);
       }
-      const { data, error, status } = await query.returns<OperationQueryRow[]>();
+      const { data, error, status } = await query
+        .limit(POSTGREST_MAX_ROWS)
+        .returns<OperationQueryRow[]>();
       if (error) throwPostgrestError(error, "No se pudieron leer las operaciones.", status);
       return (data ?? []).map(mapOperation);
     },

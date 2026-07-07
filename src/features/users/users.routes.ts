@@ -136,6 +136,9 @@ export const createUserRoute = createRoute({
     403: jsonErrorResponse(
       "Acceso denegado. Se requiere privilegios de administrador (rol `admin`).",
     ),
+    429: jsonErrorResponse(
+      "Demasiadas mutaciones de usuarios desde esta IP (`RATE_LIMITED`). Esperá y reintentá.",
+    ),
     500: jsonErrorResponse(
       "Error interno inesperado en el servidor al interactuar con Supabase Auth o al enviar el email.",
     ),
@@ -173,6 +176,9 @@ export const updateUserRoute = createRoute({
       "Acceso denegado. Se requiere privilegios de administrador (rol `admin`).",
     ),
     404: jsonErrorResponse("Usuario no encontrado para el UUID provisto."),
+    429: jsonErrorResponse(
+      "Demasiadas mutaciones de usuarios desde esta IP (`RATE_LIMITED`). Esperá y reintentá.",
+    ),
     500: jsonErrorResponse(
       "Error interno inesperado en el servidor al actualizar perfiles o credenciales.",
     ),
@@ -204,6 +210,9 @@ export const deleteUserRoute = createRoute({
       "Acceso denegado. Se requiere privilegios de administrador (rol `admin`).",
     ),
     404: jsonErrorResponse("Usuario no encontrado para el UUID provisto."),
+    429: jsonErrorResponse(
+      "Demasiadas mutaciones de usuarios desde esta IP (`RATE_LIMITED`). Esperá y reintentá.",
+    ),
     500: jsonErrorResponse(
       "Error interno inesperado en el servidor al realizar el borrado en cascada en Supabase Auth.",
     ),

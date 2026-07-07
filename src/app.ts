@@ -41,6 +41,8 @@ export function createApp() {
   app.use("*", createCorsMiddleware());
 
   // Manejador global de errores → respuesta consistente, sin filtrar internals.
+  // Nota: el rate limiting (AGENTS.md §5/§12) vive en cada router junto a su auth
+  // (auth.router.ts, users.router.ts) — el router es dueño de toda su protección.
   app.onError(errorHandler);
 
   // --- Dominios (un router por feature, AGENTS.md §4) ---

@@ -266,7 +266,7 @@ describe("CRUD de Usuarios y Roles (Admin)", () => {
   // --- GET /admin/users (Listar) ---
 
   it("200 lista todos los usuarios combinados con perfiles", async () => {
-    setupFetchMocks();
+    const fetchMock = setupFetchMocks();
     const res = await createApp().request("/admin/users", { headers: AUTH_ADMIN }, ENV);
 
     expect(res.status).toBe(200);
@@ -294,6 +294,17 @@ describe("CRUD de Usuarios y Roles (Admin)", () => {
     expect(managerUser?.role).toBe("manager");
     expect(managerUser?.fullName).toBe("Gerente Operativo");
     expect(managerUser?.planSlug).toBe("gold");
+
+    // Condición límite (AGENTS.md §11): las queries de profiles y memberships llevan
+    // el cap explícito POSTGREST_MAX_ROWS — sin él la truncación del server es invisible.
+    const profilesCall = callsTo(fetchMock, "/rest/v1/profiles").find(([input]) =>
+      String(input).includes("limit=1000"),
+    );
+    const membershipsCall = callsTo(fetchMock, "/rest/v1/academy_memberships").find(([input]) =>
+      String(input).includes("limit=1000"),
+    );
+    expect(profilesCall).toBeDefined();
+    expect(membershipsCall).toBeDefined();
   });
 
   it("502 si falla la API de Auth al listar", async () => {
@@ -560,6 +571,38 @@ describe("CRUD de Usuarios y Roles (Admin)", () => {
     expect(deletes.length).toBe(1);
     expect(String(deletes[0]?.[0])).toContain(`user_id=eq.${UUID_ADMIN}`);
     expect(callsTo(fetchMock, "/rest/v1/academy_memberships", "POST").length).toBe(0);
+  });
+
+  // --- Rate limiting de mutaciones admin ---
+
+  it("429 en POST /admin/users cuando el rate limiter está agotado (GET no se limita)", async () => {
+    setupFetchMocks();
+    const envWithLimiter = {
+      ...ENV,
+      ADMIN_WRITE_RATE_LIMITER: { limit: async () => ({ success: false }) },
+    };
+
+    // GET (listado) no pasa por el limiter de mutaciones.
+    const resGet = await createApp().request(
+      "/admin/users",
+      { headers: AUTH_ADMIN },
+      envWithLimiter,
+    );
+    expect(resGet.status).toBe(200);
+
+    // POST (aprovisiona + envía email) sí se limita.
+    const resPost = await createApp().request(
+      "/admin/users",
+      {
+        method: "POST",
+        headers: { ...AUTH_ADMIN, "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "otro@example.com", role: "user" }),
+      },
+      envWithLimiter,
+    );
+    expect(resPost.status).toBe(429);
+    const body = (await resPost.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("RATE_LIMITED");
   });
 
   it("400 y no muta nada si el planSlug no existe", async () => {

@@ -6,7 +6,7 @@
   "description": "API REST de Investep App (Hono + Cloudflare Workers).",
   "scripts": {
     "dev": "wrangler dev",
-    "test": "bun test",
+    "test": "bun test src tests",
     "lint": "biome check . && tsc --noEmit",
     "format": "biome format --write .",
     "fix": "biome check --write .",

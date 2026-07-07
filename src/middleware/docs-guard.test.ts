@@ -39,4 +39,13 @@ describe("docs-guard", () => {
     );
     expect(res.status).toBe(200);
   });
+
+  it("production con token de prefijo correcto pero distinto largo: 401", async () => {
+    const res = await createApp().request(
+      "/openapi.json",
+      { headers: { Authorization: "Bearer sek-y-algo-mas" } },
+      { ...PROD_ENV, DOCS_TOKEN: "sek" },
+    );
+    expect(res.status).toBe(401);
+  });
 });

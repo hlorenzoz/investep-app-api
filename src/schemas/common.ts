@@ -13,6 +13,7 @@ export const ErrorSchema = z
         description:
           "Código de error estable. Mapeo por status: 400/422→VALIDATION_ERROR, " +
           "401→UNAUTHORIZED, 403→FORBIDDEN, 404→NOT_FOUND, 409→CONFLICT, " +
+          "429→RATE_LIMITED (transitorio: esperar y reintentar), " +
           "500→INTERNAL_ERROR, 503→SERVICE_UNAVAILABLE (transitorio: reintentar, no desloguear).",
         example: "VALIDATION_ERROR",
       }),

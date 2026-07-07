@@ -5,6 +5,15 @@
  */
 export type Environment = "development" | "staging" | "production";
 
+/**
+ * Binding de Rate Limiting nativo de Workers (wrangler.jsonc → unsafe.bindings,
+ * type "ratelimit"). Interfaz propia (no de @cloudflare/workers-types) para no
+ * atar los tests ni el código a la versión de los tipos generados.
+ */
+export interface RateLimiter {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
 export interface Env {
   // Variables públicas (wrangler.jsonc → vars)
   ENVIRONMENT: Environment;
@@ -28,4 +37,9 @@ export interface Env {
   // Bindings de Cloudflare
   CACHE: KVNamespace;
   DOCUMENTS: R2Bucket;
+
+  // Rate limiting nativo (unsafe.bindings en wrangler.jsonc). Opcionales: si faltan
+  // (tests, entorno local sin soporte) el middleware hace fail-open y lo loguea.
+  AUTH_RATE_LIMITER?: RateLimiter;
+  ADMIN_WRITE_RATE_LIMITER?: RateLimiter;
 }

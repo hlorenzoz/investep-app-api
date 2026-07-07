@@ -6,6 +6,14 @@ import type { Env } from "../types/env";
 export type AppSupabaseClient = SupabaseClient<Database>;
 
 /**
+ * Cap explícito de filas para listados sin paginación. Coincide con el `db-max-rows`
+ * default de PostgREST (Supabase): hace VISIBLE en el código el techo que el server ya
+ * aplica en silencio. Si un listado puede superar este valor, la respuesta correcta es
+ * paginación real en ese endpoint — no subir esta constante.
+ */
+export const POSTGREST_MAX_ROWS = 1000;
+
+/**
  * Cliente Supabase para contexto de usuario (anon key). Se crea por request:
  * Workers no mantiene estado entre invocaciones y usamos el cliente HTTP/REST,
  * no conexiones TCP a Postgres (AGENTS.md §3).

@@ -36,6 +36,9 @@ export const meRoute = createRoute({
       description: "El token es válido; devuelve el usuario autenticado.",
     },
     401: jsonErrorResponse("Token ausente, inválido o expirado (`UNAUTHORIZED`) → re-autenticar."),
+    429: jsonErrorResponse(
+      "Demasiadas solicitudes desde esta IP (`RATE_LIMITED`). Transitorio: esperá y reintentá.",
+    ),
     503: jsonErrorResponse(
       "No se pudo verificar la sesión contra Supabase — throttling/outage (`SERVICE_UNAVAILABLE`). " +
         "Transitorio: reintentá con backoff, NO desloguees al usuario.",
@@ -76,6 +79,9 @@ export const changePasswordRoute = createRoute({
     401: jsonErrorResponse("Token ausente, inválido o expirado (`UNAUTHORIZED`) → re-autenticar."),
     422: jsonErrorResponse(
       "Cuerpo malformado (`VALIDATION_ERROR`): falta `newPassword` o no es un string. Bug del cliente.",
+    ),
+    429: jsonErrorResponse(
+      "Demasiadas solicitudes desde esta IP (`RATE_LIMITED`). Transitorio: esperá y reintentá.",
     ),
     500: jsonErrorResponse(
       "Error inesperado de Supabase al cambiar la contraseña (`INTERNAL_ERROR`).",

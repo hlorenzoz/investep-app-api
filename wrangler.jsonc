@@ -29,6 +29,27 @@
       "bucket_name": "investep-documents"
     }
   ],
+  // Rate limiting nativo de Workers (por IP, per-colo). `namespace_id` es un entero
+  // arbitrario ÚNICO por binding dentro de este Worker (no es un recurso a crear en
+  // el dashboard). El middleware hace fail-open si el binding falta (tests/local).
+  "unsafe": {
+    "bindings": [
+      {
+        // /auth/*: frena fuerza bruta pre-autenticación.
+        "name": "AUTH_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1001",
+        "simple": { "limit": 60, "period": 60 }
+      },
+      {
+        // Mutaciones de /admin/users: POST envía email (Resend) → vector de costo.
+        "name": "ADMIN_WRITE_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1002",
+        "simple": { "limit": 10, "period": 60 }
+      }
+    ]
+  },
 
   // Environments: staging y production apuntan a proyectos Supabase cloud separados
   // (investep-staging, investep). El entorno devel/local usa este top-level + .dev.vars
@@ -39,12 +60,44 @@
     "staging": {
       "vars": { "ENVIRONMENT": "staging" },
       "kv_namespaces": [{ "binding": "CACHE", "id": "REPLACE_WITH_STAGING_KV_ID" }],
-      "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "investep-documents-staging" }]
+      "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "investep-documents-staging" }],
+      "unsafe": {
+        "bindings": [
+          {
+            "name": "AUTH_RATE_LIMITER",
+            "type": "ratelimit",
+            "namespace_id": "1001",
+            "simple": { "limit": 60, "period": 60 }
+          },
+          {
+            "name": "ADMIN_WRITE_RATE_LIMITER",
+            "type": "ratelimit",
+            "namespace_id": "1002",
+            "simple": { "limit": 10, "period": 60 }
+          }
+        ]
+      }
     },
     "production": {
       "vars": { "ENVIRONMENT": "production" },
       "kv_namespaces": [{ "binding": "CACHE", "id": "REPLACE_WITH_PRODUCTION_KV_ID" }],
-      "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "investep-documents" }]
+      "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "investep-documents" }],
+      "unsafe": {
+        "bindings": [
+          {
+            "name": "AUTH_RATE_LIMITER",
+            "type": "ratelimit",
+            "namespace_id": "1001",
+            "simple": { "limit": 60, "period": 60 }
+          },
+          {
+            "name": "ADMIN_WRITE_RATE_LIMITER",
+            "type": "ratelimit",
+            "namespace_id": "1002",
+            "simple": { "limit": 10, "period": 60 }
+          }
+        ]
+      }
     }
   }
 
