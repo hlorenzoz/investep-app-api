@@ -116,6 +116,59 @@ populate-brokers ENV="":
 populate-recommended-books ENV="":
     bun run scripts/populate-recommended-books.ts {{ENV}}
 
+# Seed COMPLETO de un entorno, en orden de dependencias. Un comando por rama:
+#   just seed            # devel / local   (requiere el stack arriba: `just up`)
+#   just seed staging    # staging
+#   just seed production # main (pide confirmación)
+# Aplica migraciones (traen planes / activos / brókers baseline) y luego siembra catálogos +
+# usuarios. Idempotente: re-ejecutarlo SINCRONIZA (upserts). Prerequisitos cloud: que exista
+# `.dev.vars.<env>` y que el proyecto de Supabase LINKEADO sea el del ENV (`supabase link`).
+# Nota: reejecutar resetea contraseñas de admin/tier/demo y reenvía el email del admin.
+seed ENV="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ENVARG="{{ENV}}"
+    LABEL="${ENVARG:-local/devel}"
+    echo "==> Seed del entorno: $LABEL"
+
+    # Producción: confirmación explícita antes de migrar+sembrar la base productiva.
+    if [ "$ENVARG" = "production" ]; then
+      read -r -p "Vas a migrar + sembrar PRODUCCIÓN. Escribí 'production' para confirmar: " CONFIRM
+      [ "$CONFIRM" = "production" ] || { echo "Cancelado."; exit 1; }
+    fi
+
+    # 1) Migraciones (planes, activos/tickers, catálogo base de brókers).
+    if [ -z "$ENVARG" ]; then
+      echo "==> [1/5] Migraciones (Docker migrate) — requiere el stack arriba (just up)"
+      docker compose up migrate
+    else
+      echo "==> [1/5] Migraciones (supabase db push) — proyecto LINKEADO debe ser '$ENVARG'"
+      bunx supabase db push
+    fi
+
+    # 2) Catálogos (idempotentes, upsert por slug).
+    echo "==> [2/5] Catálogos: brókers, tienda, libros"
+    bun run scripts/populate-brokers.ts "$ENVARG"
+    bun run scripts/populate-tienda.ts "$ENVARG"
+    bun run scripts/populate-recommended-books.ts "$ENVARG"
+
+    # 3) Primer admin (provision + set-admin usan --env, no posicional).
+    echo "==> [3/5] Primer admin (bootstrap)"
+    ENVFLAG=""
+    [ -n "$ENVARG" ] && ENVFLAG="--env $ENVARG"
+    bun run scripts/provision-user.ts $ENVFLAG
+    bun run scripts/set-admin.ts $ENVFLAG
+
+    # 4) Usuarios por plan (necesita investep_plans + brókers + investment_plans).
+    echo "==> [4/5] Usuarios por plan (bronze/silver/gold/platinum)"
+    bun run scripts/create-users-by-plan.ts "$ENVARG"
+
+    # 5) Usuario demo (necesita brókers + investment_plans, incl. options 35).
+    echo "==> [5/5] Usuario demo (+ operaciones)"
+    bun run scripts/create-demo-user.ts "$ENVARG"
+
+    echo "==> Seed completo: $LABEL"
+
 # Obtiene un access_token JWT para el usuario indicado (o el bootstrap por defecto).
 token EMAIL="" PASSWORD="":
     bun run scripts/get-token.ts {{EMAIL}} {{PASSWORD}}
