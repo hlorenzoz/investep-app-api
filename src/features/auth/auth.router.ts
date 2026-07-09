@@ -3,8 +3,8 @@ import { validationHook } from "../../lib/openapi";
 import { requireAuth } from "../../middleware/auth";
 import { createRateLimitMiddleware } from "../../middleware/rate-limit";
 import type { AuthedBindings } from "../../types/app";
-import { changePasswordHandler, meHandler } from "./auth.handlers";
-import { changePasswordRoute, meRoute } from "./auth.routes";
+import { changePasswordHandler, meHandler, updateProfileHandler } from "./auth.handlers";
+import { changePasswordRoute, meRoute, updateProfileRoute } from "./auth.routes";
 
 /**
  * Router del dominio AUTH. La validación de sesión se delega a Supabase Auth;
@@ -29,6 +29,10 @@ authRouter.use(
 // Protege /auth/me: valida el JWT antes de ejecutar el handler.
 authRouter.use("/me", requireAuth);
 authRouter.openapi(meRoute, meHandler);
+
+// Protege /auth/profile: permite actualizar perfil del usuario autenticado.
+authRouter.use("/profile", requireAuth);
+authRouter.openapi(updateProfileRoute, updateProfileHandler);
 
 // Protege /auth/change-password: el userId sale del token, nunca del body.
 authRouter.use("/change-password", requireAuth);

@@ -542,3 +542,254 @@ describe("POST /auth/change-password", () => {
     expect(body.error.code).toBe("INTERNAL_ERROR");
   });
 });
+
+describe("GET /auth/me — profile", () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  function mockMeWithProfile(
+    user: Record<string, unknown>,
+    profile: Record<string, unknown> | null,
+  ) {
+    globalThis.fetch = mock(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/rest/v1/profiles")) {
+        return new Response(JSON.stringify(profile ? [profile] : []), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("/rest/v1/academy_memberships")) {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify(user), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+  }
+
+  it("retorna los datos del perfil si existen en profiles", async () => {
+    mockMeWithProfile(
+      { id: "uid-profile", email: "profile@example.com", user_metadata: {} },
+      { id: "uid-profile", full_name: "Juan Pérez", phone: "+34 600 000 000", country: "España" },
+    );
+
+    const res = await createApp().request(
+      "/auth/me",
+      { headers: { Authorization: "Bearer valid" } },
+      ENV,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      user: { fullName: string; phone: string; country: string };
+    };
+    expect(body.user.fullName).toBe("Juan Pérez");
+    expect(body.user.phone).toBe("+34 600 000 000");
+    expect(body.user.country).toBe("España");
+  });
+
+  it("retorna null si el perfil no existe en profiles", async () => {
+    mockMeWithProfile(
+      { id: "uid-noprofile", email: "noprofile@example.com", user_metadata: {} },
+      null,
+    );
+
+    const res = await createApp().request(
+      "/auth/me",
+      { headers: { Authorization: "Bearer valid" } },
+      ENV,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      user: { fullName: string | null; phone: string | null; country: string | null };
+    };
+    expect(body.user.fullName).toBeNull();
+    expect(body.user.phone).toBeNull();
+    expect(body.user.country).toBeNull();
+  });
+});
+
+describe("PATCH /auth/profile", () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  let upsertCalled = false;
+  let upsertPayload: unknown = null;
+
+  function mockProfileUpdate(user: Record<string, unknown>, profile: Record<string, unknown>) {
+    upsertCalled = false;
+    upsertPayload = null;
+    globalThis.fetch = mock(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url.includes("/rest/v1/profiles")) {
+        if (method === "POST") {
+          upsertCalled = true;
+          upsertPayload = JSON.parse(String(init?.body));
+          // El upsert con `.select()` devuelve la fila fusionada (return=representation).
+          return new Response(JSON.stringify([profile]), {
+            status: 201,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify([profile]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("/rest/v1/academy_memberships")) {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify(user), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+  }
+
+  it("401 sin header Authorization", async () => {
+    const res = await createApp().request("/auth/profile", { method: "PATCH" }, ENV);
+    expect(res.status).toBe(401);
+  });
+
+  it("200 y actualiza perfil con los datos provistos", async () => {
+    mockProfileUpdate(
+      { id: "uid-profile", email: "profile@example.com", user_metadata: {} },
+      { id: "uid-profile", full_name: "Juan Modificado", phone: "+34 999", country: "Alemania" },
+    );
+
+    const res = await createApp().request(
+      "/auth/profile",
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: "Bearer valid",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          fullName: "Juan Modificado",
+          phone: "+34 999",
+          country: "Alemania",
+        }),
+      },
+      ENV,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      user: { fullName: string; phone: string; country: string };
+    };
+    expect(body.user.fullName).toBe("Juan Modificado");
+    expect(body.user.phone).toBe("+34 999");
+    expect(body.user.country).toBe("Alemania");
+    expect(upsertCalled).toBe(true);
+    expect(upsertPayload).toEqual(
+      expect.objectContaining({
+        id: "uid-profile",
+        full_name: "Juan Modificado",
+        phone: "+34 999",
+        country: "Alemania",
+      }),
+    );
+  });
+
+  it("la respuesta refleja la fila que devuelve el upsert, no una relectura separada", async () => {
+    // El POST (upsert con return=representation) devuelve la fila fusionada; una relectura
+    // separada devolvería vacío. La respuesta DEBE basarse en el retorno del upsert.
+    globalThis.fetch = mock(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url.includes("/rest/v1/profiles")) {
+        if (method === "POST") {
+          return new Response(
+            JSON.stringify([{ full_name: "Ana", phone: "+34 611", country: "España" }]),
+            { status: 201, headers: { "content-type": "application/json" } },
+          );
+        }
+        // Relectura separada: vacía. Si el handler dependiera de esto, perdería el dato.
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("/rest/v1/academy_memberships")) {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(
+        JSON.stringify({ id: "uid-x", email: "x@example.com", user_metadata: {} }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    const res = await createApp().request(
+      "/auth/profile",
+      {
+        method: "PATCH",
+        headers: { Authorization: "Bearer valid", "content-type": "application/json" },
+        body: JSON.stringify({ fullName: "Ana", phone: "+34 611", country: "España" }),
+      },
+      ENV,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      user: { fullName: string; phone: string; country: string };
+    };
+    expect(body.user.fullName).toBe("Ana");
+    expect(body.user.phone).toBe("+34 611");
+    expect(body.user.country).toBe("España");
+  });
+
+  it("503 si el upsert del perfil falla (error de escritura surfaceado)", async () => {
+    globalThis.fetch = mock(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url.includes("/rest/v1/profiles") && method === "POST") {
+        return new Response(JSON.stringify({ message: "boom", code: "", details: "", hint: "" }), {
+          status: 500,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("/rest/v1/academy_memberships")) {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(
+        JSON.stringify({ id: "uid-x", email: "x@example.com", user_metadata: {} }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    const res = await createApp().request(
+      "/auth/profile",
+      {
+        method: "PATCH",
+        headers: { Authorization: "Bearer valid", "content-type": "application/json" },
+        body: JSON.stringify({ fullName: "Ana" }),
+      },
+      ENV,
+    );
+
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("SERVICE_UNAVAILABLE");
+  });
+});

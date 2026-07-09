@@ -9,6 +9,9 @@ export const AuthUserSchema = z
       mustResetPassword: z.boolean().openapi({ example: false }),
       role: z.enum(["admin", "manager", "user"]).openapi({ example: "user" }),
       planSlug: z.string().nullable().optional().openapi({ example: "gold" }),
+      fullName: z.string().nullable().optional().openapi({ example: "Juan Pérez" }),
+      phone: z.string().nullable().optional().openapi({ example: "+34 600 000 000" }),
+      country: z.string().nullable().optional().openapi({ example: "España" }),
     }),
   })
   .openapi("AuthUser");
@@ -18,6 +21,41 @@ export const ChangePasswordRequestSchema = z
     newPassword: z.string().openapi({ example: "una-contraseña-nueva-segura" }),
   })
   .openapi("ChangePasswordRequest");
+
+export const UpdateProfileRequestSchema = z
+  .object({
+    fullName: z.string().min(1).nullable().optional().openapi({ example: "Juan Pérez Modificado" }),
+    phone: z.string().nullable().optional().openapi({ example: "+34 600 000 000" }),
+    country: z.string().nullable().optional().openapi({ example: "España" }),
+  })
+  .openapi("UpdateProfileRequest");
+
+export const updateProfileRoute = createRoute({
+  method: "patch",
+  path: "/profile",
+  tags: ["Auth"],
+  summary: "Actualizar perfil del usuario autenticado",
+  description:
+    "Modifica de forma parcial y segura las propiedades del perfil del usuario autenticado en la tabla `public.profiles`.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { "application/json": { schema: UpdateProfileRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      content: { "application/json": { schema: AuthUserSchema } },
+      description: "Perfil de usuario actualizado exitosamente.",
+    },
+    400: jsonErrorResponse("Datos de entrada inválidos."),
+    401: jsonErrorResponse("Token ausente, inválido o expirado."),
+    500: jsonErrorResponse("Error interno inesperado en el servidor."),
+  },
+});
+
+export type UpdateProfileRoute = typeof updateProfileRoute;
 
 export const meRoute = createRoute({
   method: "get",
