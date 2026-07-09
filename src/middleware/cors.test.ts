@@ -79,6 +79,43 @@ describe("resolveAllowedOrigin", () => {
   });
 });
 
+describe("resolveAllowedOrigin · previews de Cloudflare Pages (investep-app)", () => {
+  const staging = { ...BASE_ENV, ENVIRONMENT: "staging" as const };
+
+  it("staging: permite un preview por-deploy (<hash>.investep-app.pages.dev)", () => {
+    const origin = "https://24ba98ca.investep-app.pages.dev";
+    expect(resolveAllowedOrigin(staging, origin)).toBe(origin);
+  });
+
+  it("staging: permite la URL canónica y el alias de branch de Pages", () => {
+    expect(resolveAllowedOrigin(staging, "https://investep-app.pages.dev")).toBe(
+      "https://investep-app.pages.dev",
+    );
+    expect(resolveAllowedOrigin(staging, "https://main.investep-app.pages.dev")).toBe(
+      "https://main.investep-app.pages.dev",
+    );
+  });
+
+  it("development: también permite los previews", () => {
+    const origin = "https://abc123.investep-app.pages.dev";
+    expect(resolveAllowedOrigin(BASE_ENV, origin)).toBe(origin);
+  });
+
+  it("producción: NO permite previews de Pages (debe usar custom domain en CORS_ORIGINS)", () => {
+    const prod = { ...BASE_ENV, ENVIRONMENT: "production" as const };
+    expect(resolveAllowedOrigin(prod, "https://24ba98ca.investep-app.pages.dev")).toBeNull();
+  });
+
+  it("staging: NO permite otro proyecto de Pages ni http (ancla al proyecto + https)", () => {
+    expect(resolveAllowedOrigin(staging, "https://evil.pages.dev")).toBeNull();
+    expect(resolveAllowedOrigin(staging, "https://otro-proyecto.pages.dev")).toBeNull();
+    // suffix attack: el dominio real no es sufijo de otro
+    expect(resolveAllowedOrigin(staging, "https://investep-app.pages.dev.evil.com")).toBeNull();
+    // Pages sirve por https; http no
+    expect(resolveAllowedOrigin(staging, "http://24ba98ca.investep-app.pages.dev")).toBeNull();
+  });
+});
+
 describe("CORS middleware (integración)", () => {
   it("GET con Origin permitido → refleja Access-Control-Allow-Origin", async () => {
     const res = await createApp().request(

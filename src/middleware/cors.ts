@@ -5,6 +5,15 @@ import type { Env } from "../types/env";
 
 const LOCALHOST_ORIGIN = /^https?:\/\/localhost(:\d+)?$/;
 
+/**
+ * Previews de Cloudflare Pages del frontend (proyecto `investep-app`): la URL canónica
+ * `investep-app.pages.dev` y los deploys `<hash|branch>.investep-app.pages.dev`, que cambian
+ * en cada build. El sufijo del proyecto va ANCLADO (`$`) y solo `https`, así que NO habilita
+ * `*.pages.dev` de terceros — únicamente los deploys de ESTE proyecto. Igual que localhost:
+ * solo dev/staging, nunca producción (en prod el front usa su custom domain en CORS_ORIGINS).
+ */
+const PAGES_PREVIEW_ORIGIN = /^https:\/\/([a-z0-9-]+\.)?investep-app\.pages\.dev$/;
+
 /** Canoniza un origin para comparar: sin espacios, sin barra final, en minúsculas
  * (el browser manda el host en minúsculas y sin path; una config con `/` o mayúsculas
  * no debe fallar el match). */
@@ -27,12 +36,13 @@ export function resolveAllowedOrigin(env: Env | undefined, origin: string): stri
   const normalized = normalizeOrigin(origin);
   const configured = (env?.CORS_ORIGINS ?? "").split(",").map(normalizeOrigin).filter(Boolean);
   if (configured.includes(normalized)) return origin;
+  // Solo en dev/staging (fail-closed: un ENVIRONMENT ausente/mal escrito no habilita nada):
+  // cualquier localhost y los previews de Cloudflare Pages del frontend.
   const environment = env?.ENVIRONMENT;
-  if (
-    (environment === "development" || environment === "staging") &&
-    LOCALHOST_ORIGIN.test(normalized)
-  ) {
-    return origin;
+  if (environment === "development" || environment === "staging") {
+    if (LOCALHOST_ORIGIN.test(normalized) || PAGES_PREVIEW_ORIGIN.test(normalized)) {
+      return origin;
+    }
   }
   return null;
 }
