@@ -25,9 +25,12 @@ if [ "$branch" != "staging" ]; then
 fi
 
 echo "seed(staging): [1/2] migraciones (supabase db push --linked)…"
-pw_flag=()
-[ -n "${SUPABASE_DB_PASSWORD:-}" ] && pw_flag=(-p "$SUPABASE_DB_PASSWORD")
-bunx supabase db push --linked --yes "${pw_flag[@]}"
+# if/else (no array vacío) por compat con Bash 3.2 de macOS + `set -u`.
+if [ -n "${SUPABASE_DB_PASSWORD:-}" ]; then
+  bunx supabase db push --linked --yes -p "$SUPABASE_DB_PASSWORD"
+else
+  bunx supabase db push --linked --yes
+fi
 
 echo "seed(staging): [2/2] catálogos (brókers → tienda → libros)…"
 bun run scripts/populate-brokers.ts staging

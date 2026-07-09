@@ -68,7 +68,35 @@ deploy-staging:
 deploy-production:
     bunx wrangler deploy --env production
 
-# Aplicar las migraciones al proyecto Supabase ENLAZADO (corré `just db-link` antes)
+# Linkea el CLI de Supabase al proyecto cloud del entorno, derivando el project-ref del
+# SUPABASE_URL de `.dev.vars.<env>` (https://<ref>.supabase.co → <ref>). Se corre UNA vez por
+# máquina antes de `db-push` / el seed de staging. Requiere estar logueado (`supabase login`
+# o SUPABASE_ACCESS_TOKEN) y pide el password de la DB (o tomalo de SUPABASE_DB_PASSWORD).
+# Uso: `just db-link staging` | `just db-link production`.
+db-link ENV:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{ENV}}" in staging|production) ;; *) echo "ENV debe ser staging o production (no '{{ENV}}')"; exit 1;; esac
+    envfile=".dev.vars.{{ENV}}"
+    [ -f "$envfile" ] || { echo "No existe $envfile"; exit 1; }
+    # Extrae SUPABASE_URL sin herramientas externas (bash puro; tolera comillas).
+    url=""
+    while IFS= read -r line; do
+      case "$line" in SUPABASE_URL=*) url="${line#SUPABASE_URL=}" ;; esac
+    done < "$envfile"
+    url="${url%\"}"; url="${url#\"}"; url="${url%\'}"; url="${url#\'}"
+    [ -n "$url" ] || { echo "Falta SUPABASE_URL en $envfile"; exit 1; }
+    # https://<ref>.supabase.co → <ref>
+    ref="${url#*://}"; ref="${ref%%.*}"
+    echo "supabase link → '{{ENV}}' (project-ref: $ref)"
+    # if/else (no array vacío) por compat con Bash 3.2 de macOS + `set -u`.
+    if [ -n "${SUPABASE_DB_PASSWORD:-}" ]; then
+      bunx supabase link --project-ref "$ref" --password "$SUPABASE_DB_PASSWORD"
+    else
+      bunx supabase link --project-ref "$ref"
+    fi
+
+# Aplicar las migraciones al proyecto Supabase ENLAZADO (corré `just db-link <env>` antes)
 db-push:
     bunx supabase db push
 
