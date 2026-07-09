@@ -1,159 +1,157 @@
 {
-	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "investep-app-api",
-	"main": "src/index.ts",
-	"compatibility_date": "2026-06-01",
-	// nodejs_compat lo requiere @supabase/supabase-js para correr en Workers.
-	"compatibility_flags": [
-		"nodejs_compat"
-	],
-	"observability": {
-		"enabled": true
-	},
-	// Variables NO sensibles (públicas). Los secretos van por `wrangler secret put`
-	// o `.dev.vars` en local — NUNCA en este archivo.
-	"vars": {
-		"ENVIRONMENT": "development"
-	},
-	// Caché (AGENTS.md §2). Crear con: `bunx wrangler kv namespace create CACHE`
-	// y reemplazar el id. Para `wrangler dev` el id placeholder funciona (storage local).
-	"kv_namespaces": [
-		{
-			"binding": "CACHE",
-			"id": "REPLACE_WITH_KV_NAMESPACE_ID"
-		}
-	],
-	// Documentos / archivos (AGENTS.md §2). Crear con:
-	// `bunx wrangler r2 bucket create investep-documents`
-	"r2_buckets": [
-		{
-			"binding": "DOCUMENTS",
-			"bucket_name": "investep-documents"
-		}
-	],
-	// Rate limiting nativo de Workers (por IP, per-colo). `namespace_id` es un entero
-	// arbitrario ÚNICO por binding dentro de este Worker (no es un recurso a crear en
-	// el dashboard). El middleware hace fail-open si el binding falta (tests/local).
-	"unsafe": {
-		"bindings": [
-			{
-				// /auth/*: frena fuerza bruta pre-autenticación.
-				"name": "AUTH_RATE_LIMITER",
-				"type": "ratelimit",
-				"namespace_id": "1001",
-				"simple": {
-					"limit": 60,
-					"period": 60
-				}
-			},
-			{
-				// Mutaciones de /admin/users: POST envía email (Resend) → vector de costo.
-				"name": "ADMIN_WRITE_RATE_LIMITER",
-				"type": "ratelimit",
-				"namespace_id": "1002",
-				"simple": {
-					"limit": 10,
-					"period": 60
-				}
-			}
-		]
-	},
-	// Environments: staging y production apuntan a proyectos Supabase cloud separados
-	// (investep-staging, investep). El entorno devel/local usa este top-level + .dev.vars
-	// (y en Docker, el Supabase local). Los secretos (SUPABASE_*) NO van acá: van en
-	// `.dev.vars.<env>` (local) o `wrangler secret put <NOMBRE> --env <env>` (deploy).
-	// OJO Wrangler: los named environments NO heredan bindings del top-level → se repiten.
-	"env": {
-		"staging": {
-			"vars": {
-				"ENVIRONMENT": "staging"
-			},
-			"kv_namespaces": [
-				{
-					"binding": "CACHE",
-					"id": "f3dad781a2de4b829b17158e2a455689",
-					"remote": true
-				},
-			],
-			"r2_buckets": [
-				{
-					"binding": "DOCUMENTS",
-					"bucket_name": "investep-documents-staging"
-				}
-			],
-			"unsafe": {
-				"bindings": [
-					{
-						"name": "AUTH_RATE_LIMITER",
-						"type": "ratelimit",
-						"namespace_id": "1001",
-						"simple": {
-							"limit": 60,
-							"period": 60
-						}
-					},
-					{
-						"name": "ADMIN_WRITE_RATE_LIMITER",
-						"type": "ratelimit",
-						"namespace_id": "1002",
-						"simple": {
-							"limit": 10,
-							"period": 60
-						}
-					}
-				]
-			}
-		},
-		"production": {
-			"vars": {
-				"ENVIRONMENT": "production"
-			},
-			"kv_namespaces": [
-				{
-					"binding": "CACHE",
-					"id": "REPLACE_WITH_PRODUCTION_KV_ID"
-				}
-			],
-			"r2_buckets": [
-				{
-					"binding": "DOCUMENTS",
-					"bucket_name": "investep-documents"
-				}
-			],
-			"unsafe": {
-				"bindings": [
-					{
-						"name": "AUTH_RATE_LIMITER",
-						"type": "ratelimit",
-						"namespace_id": "1001",
-						"simple": {
-							"limit": 60,
-							"period": 60
-						}
-					},
-					{
-						"name": "ADMIN_WRITE_RATE_LIMITER",
-						"type": "ratelimit",
-						"namespace_id": "1002",
-						"simple": {
-							"limit": 10,
-							"period": 60
-						}
-					}
-				]
-			}
-		}
-	}
-	// --- Puntos de extensión (descomentar cuando haga falta) ---
-	//
-	// Refrescos programados de cartera (AGENTS.md §3/§6): nunca en el handler de una request.
-	// "triggers": {
-	//   "crons": ["0 */6 * * *"]
-	// },
-	//
-	// Trabajos pesados / ingestas fuera del request:
-	// "queues": {
-	//   "producers": [{ "binding": "PORTFOLIO_SYNC", "queue": "portfolio-sync" }],
-	//   "consumers": [{ "queue": "portfolio-sync" }]
-	// }
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "investep-app-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-01",
+  // nodejs_compat lo requiere @supabase/supabase-js para correr en Workers.
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  // Variables NO sensibles (públicas). Los secretos van por `wrangler secret put`
+  // o `.dev.vars` en local — NUNCA en este archivo.
+  "vars": {
+    "ENVIRONMENT": "development"
+  },
+  // Caché (AGENTS.md §2). Crear con: `bunx wrangler kv namespace create CACHE`
+  // y reemplazar el id. Para `wrangler dev` el id placeholder funciona (storage local).
+  "kv_namespaces": [
+    {
+      "binding": "CACHE",
+      "id": "REPLACE_WITH_KV_NAMESPACE_ID"
+    }
+  ],
+  // Documentos / archivos (AGENTS.md §2). Crear con:
+  // `bunx wrangler r2 bucket create investep-documents`
+  "r2_buckets": [
+    {
+      "binding": "DOCUMENTS",
+      "bucket_name": "investep-documents"
+    }
+  ],
+  // Rate limiting nativo de Workers (por IP, per-colo). `namespace_id` es un entero
+  // arbitrario ÚNICO por binding dentro de este Worker (no es un recurso a crear en
+  // el dashboard). El middleware hace fail-open si el binding falta (tests/local).
+  "unsafe": {
+    "bindings": [
+      {
+        // /auth/*: frena fuerza bruta pre-autenticación.
+        "name": "AUTH_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1001",
+        "simple": {
+          "limit": 60,
+          "period": 60
+        }
+      },
+      {
+        // Mutaciones de /admin/users: POST envía email (Resend) → vector de costo.
+        "name": "ADMIN_WRITE_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1002",
+        "simple": {
+          "limit": 10,
+          "period": 60
+        }
+      }
+    ]
+  },
+  // Environments: staging y production apuntan a proyectos Supabase cloud separados
+  // (investep-staging, investep). El entorno devel/local usa este top-level + .dev.vars
+  // (y en Docker, el Supabase local). Los secretos (SUPABASE_*) NO van acá: van en
+  // `.dev.vars.<env>` (local) o `wrangler secret put <NOMBRE> --env <env>` (deploy).
+  // OJO Wrangler: los named environments NO heredan bindings del top-level → se repiten.
+  "env": {
+    "staging": {
+      "vars": {
+        "ENVIRONMENT": "staging"
+      },
+      "kv_namespaces": [
+        {
+          "binding": "CACHE",
+          "id": "f3dad781a2de4b829b17158e2a455689",
+          "remote": true
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "DOCUMENTS",
+          "bucket_name": "investep-documents-staging"
+        }
+      ],
+      "unsafe": {
+        "bindings": [
+          {
+            "name": "AUTH_RATE_LIMITER",
+            "type": "ratelimit",
+            "namespace_id": "1001",
+            "simple": {
+              "limit": 60,
+              "period": 60
+            }
+          },
+          {
+            "name": "ADMIN_WRITE_RATE_LIMITER",
+            "type": "ratelimit",
+            "namespace_id": "1002",
+            "simple": {
+              "limit": 10,
+              "period": 60
+            }
+          }
+        ]
+      }
+    },
+    "production": {
+      "vars": {
+        "ENVIRONMENT": "production"
+      },
+      "kv_namespaces": [
+        {
+          "binding": "CACHE",
+          "id": "REPLACE_WITH_PRODUCTION_KV_ID"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "DOCUMENTS",
+          "bucket_name": "investep-documents"
+        }
+      ],
+      "unsafe": {
+        "bindings": [
+          {
+            "name": "AUTH_RATE_LIMITER",
+            "type": "ratelimit",
+            "namespace_id": "1001",
+            "simple": {
+              "limit": 60,
+              "period": 60
+            }
+          },
+          {
+            "name": "ADMIN_WRITE_RATE_LIMITER",
+            "type": "ratelimit",
+            "namespace_id": "1002",
+            "simple": {
+              "limit": 10,
+              "period": 60
+            }
+          }
+        ]
+      }
+    }
+  }
+  // --- Puntos de extensión (descomentar cuando haga falta) ---
+  //
+  // Refrescos programados de cartera (AGENTS.md §3/§6): nunca en el handler de una request.
+  // "triggers": {
+  //   "crons": ["0 */6 * * *"]
+  // },
+  //
+  // Trabajos pesados / ingestas fuera del request:
+  // "queues": {
+  //   "producers": [{ "binding": "PORTFOLIO_SYNC", "queue": "portfolio-sync" }],
+  //   "consumers": [{ "queue": "portfolio-sync" }]
+  // }
 }
