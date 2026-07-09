@@ -109,7 +109,8 @@
       "kv_namespaces": [
         {
           "binding": "CACHE",
-          "id": "REPLACE_WITH_PRODUCTION_KV_ID"
+          "id": "c392701f904b48c9843087677292a860",
+          "remote": true
         }
       ],
       "r2_buckets": [
