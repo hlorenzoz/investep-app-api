@@ -110,10 +110,16 @@ secrets-production:
 
 # --- Aprovisionamiento de usuarios (CLI scripts) ---
 
-# Crea el primer usuario admin usando BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD del .dev.vars
-create-first-user:
-    bun run scripts/provision-user.ts
-    bun run scripts/set-admin.ts
+# Crea el primer usuario admin usando BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD del
+# archivo de entorno. ENV opcional: "" (local, .dev.vars) | staging | production.
+# Uso: `just create-first-user` (local) | `just create-first-user staging`.
+create-first-user ENV="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ef=""
+    [ -n "{{ENV}}" ] && ef="--env {{ENV}}"
+    bun run scripts/provision-user.ts $ef
+    bun run scripts/set-admin.ts $ef
 
 # Crea o resetea un usuario. PASSWORD vacío → el servidor genera la contraseña.
 create-user EMAIL PASSWORD="":
@@ -198,8 +204,10 @@ seed ENV="":
     echo "==> Seed completo: $LABEL"
 
 # Obtiene un access_token JWT para el usuario indicado (o el bootstrap por defecto).
-token EMAIL="" PASSWORD="":
-    bun run scripts/get-token.ts {{EMAIL}} {{PASSWORD}}
+# Passthrough a get-token.ts: acepta [EMAIL] [PASSWORD] y `--env <staging|production>`.
+# Uso: `just token` | `just token --env staging` | `just token a@x.com pass --env production`.
+token *ARGS:
+    bun run scripts/get-token.ts {{ARGS}}
 
 # Marca (o revoca con --revoke) a un usuario como admin: setea is_admin en app_metadata.
 # Habilita el CRUD de catálogos (brokers/plans) tras `requireAdmin`. ENV opcional via --env.
