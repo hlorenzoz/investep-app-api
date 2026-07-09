@@ -12,7 +12,7 @@ default_install_hook_types: [pre-commit, pre-push]
 # En la nube quedan: whitespace, gitleaks y check-yaml/json.
 ci:
   autofix_prs: true
-  skip: [biome-check, tsc, tests, coverage-devel, gga-devel, deploy-staging, deploy-production]
+  skip: [biome-check, tsc, tests, coverage-devel, gga-devel, seed-staging, deploy-staging, deploy-production]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -81,6 +81,14 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+        stages: [pre-push]
+      - id: seed-staging
+        name: seed catálogos → Supabase (solo en branch staging, ANTES del deploy)
+        entry: bash scripts/seed-staging.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        fail_fast: true # si el seed falla, no se despliega el Worker
         stages: [pre-push]
       - id: deploy-staging
         name: deploy → Cloudflare Workers (solo en branch staging)
